@@ -1,3 +1,6 @@
+/** Must stay first — other modules read `process.env` at load time */
+import "./loadEnv.js";
+
 import express from "express";
 import cors from "cors";
 import { dbHealth } from "./db.js";
@@ -7,6 +10,7 @@ import { clerkApiRouter } from "./routes/clerkRoutes.js";
 import { enrollmentRouter } from "./routes/enrollmentRoutes.js";
 import { publicInvestorSetupRouter } from "./routes/publicInvestorSetupRoutes.js";
 import { agriSmsPublicRouter, agriSmsWorkerRouter } from "./routes/agriSmsRoutes.js";
+import geoRoutes from "./routes/geoRoutes.js";
 
 await runMigrations().catch((err) => console.error("[migrate]", err));
 
@@ -50,6 +54,7 @@ app.use("/api/v1/clerk", clerkApiRouter);
 app.use("/api/v1/auth", authRouter);
 
 /** Agricultural advisory SMS platform (SRS §6) */
+app.use("/api/v1/geo", geoRoutes);
 app.use("/api/v1/agri-sms", agriSmsPublicRouter);
 app.use("/api/v1/agri-sms", agriSmsWorkerRouter);
 

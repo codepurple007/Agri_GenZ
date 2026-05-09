@@ -9,6 +9,7 @@ import {
   Heading,
   Input,
   Select,
+  SimpleGrid,
   Stack,
   Text,
   useToast,
@@ -16,7 +17,13 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { publicApiFetch, ApiError } from "@/api/client";
-import { KEBELE_VILLAGES } from "@/agriSms/constants";
+import {
+  DISTRICT_NUMBERS,
+  ETHIOPIA_REGION_IDS,
+  type EthiopiaRegionId,
+  formatDistrictLabel,
+  regionLabel,
+} from "@/agriSms/constants";
 import { AgriServiceLogo } from "@/components/brand/AgriServiceLogo";
 import type { Locale } from "@/i18n/landing";
 import { getStoredLocale, storeLocale } from "@/i18n/landing";
@@ -42,13 +49,22 @@ function mapLanguageToApi(v: string): string {
   return v;
 }
 
+const CROP_ROWS = [
+  ["Wheat", "cropWheat"],
+  ["Teff", "cropTeff"],
+  ["Maize", "cropMaize"],
+  ["Barley", "cropBarley"],
+] as const;
+
 export function FarmerSmsRegisterPage() {
   const [locale, setLocale] = useState<Locale>(detectLocale);
   const [online, setOnline] = useState(() => (typeof navigator !== "undefined" ? navigator.onLine : true));
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [langUi, setLangUi] = useState("Amharic");
-  const [kebele, setKebele] = useState<string>(KEBELE_VILLAGES[0]);
+  const [regionId, setRegionId] = useState<EthiopiaRegionId>("amhara");
+  const [districtNum, setDistrictNum] = useState(3);
+  const [crops, setCrops] = useState<string[]>([]);
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
@@ -87,12 +103,18 @@ export function FarmerSmsRegisterPage() {
           colorScheme="green"
           onClick={() => setLocale(k)}
           aria-pressed={locale === k}
+          minW="44px"
+          minH={{ base: "44px", md: "32px" }}
         >
           {lab}
         </Button>
       )),
     [locale],
   );
+
+  function toggleCrop(k: string) {
+    setCrops((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -105,9 +127,10 @@ export function FarmerSmsRegisterPage() {
           full_name: fullName.trim(),
           phone_number: phone.trim(),
           language: mapLanguageToApi(langUi),
-          kebele,
+          region_state: regionId,
+          district_number: districtNum,
           consent_given: true,
-          crops: [],
+          crops,
         }),
       });
       if (data.ok && data.farmer?.farmer_code) {
@@ -123,26 +146,50 @@ export function FarmerSmsRegisterPage() {
     }
   }
 
+  const touchFieldSx = { fontSize: { base: "16px", md: "md" }, minH: { base: "48px", md: "40px" } };
+
   return (
-    <Flex direction="column" minH="100dvh" bg="linear-gradient(165deg, #e9f5ec 0%, #f7faf7 45%, #ffffff 100%)">
+    <Flex
+      direction="column"
+      minH="100dvh"
+      pb="calc(16px + env(safe-area-inset-bottom, 0px))"
+      bg="linear-gradient(165deg, #e9f5ec 0%, #f7faf7 45%, #ffffff 100%)"
+    >
       {!online ? <OfflineBanner message={t.offline} /> : null}
 
-      <Flex align="flex-start" justify="space-between" gap={4} px={{ base: 4, md: 10 }} py={5} wrap="wrap" borderBottomWidth="1px" borderColor="green.100" bg="whiteAlpha.950">
-        <Flex align="center" gap={3}>
+      <Flex
+        align="flex-start"
+        justify="space-between"
+        gap={4}
+        px={{ base: "max(16px, env(safe-area-inset-left))", md: 10 }}
+        pr={{ base: "max(16px, env(safe-area-inset-right))", md: 10 }}
+        py={5}
+        wrap="wrap"
+        borderBottomWidth="1px"
+        borderColor="green.100"
+        bg="whiteAlpha.950"
+      >
+        <Flex align="center" gap={3} minW={0} flex="1 1 160px">
           <AgriServiceLogo size={40} />
-          <Heading size="sm" color="brand.900" pt={0.5}>
+          <Heading size="sm" color="brand.900" pt={0.5} noOfLines={1}>
             AgriSMS
           </Heading>
         </Flex>
-        <Flex gap={2} align="center" wrap="wrap">
+        <Flex gap={2} align="center" wrap="wrap" flex="1 1 auto" justify={{ base: "flex-start", sm: "flex-end" }}>
           {langButtons}
-          <Button as={Link} to="/" variant="ghost" colorScheme="green" size="sm">
+          <Button as={Link} to="/" variant="ghost" colorScheme="green" size="sm" minH={{ base: "44px", md: "32px" }}>
             ← {t.backHome}
           </Button>
         </Flex>
       </Flex>
 
-      <Flex flex="1" justify="center" px={4} py={{ base: 8, md: 12 }}>
+      <Flex
+        flex="1"
+        justify="center"
+        px={{ base: "max(16px, env(safe-area-inset-left))", md: 6 }}
+        pr={{ base: "max(16px, env(safe-area-inset-right))", md: 6 }}
+        py={{ base: 6, md: 12 }}
+      >
         <Box w="full" maxW="md">
           {done ? (
             <Stack spacing={5} textAlign="center" py={10} align="center">
@@ -162,43 +209,111 @@ export function FarmerSmsRegisterPage() {
               </Button>
             </Stack>
           ) : (
-            <Box bg="white" borderRadius="2xl" boxShadow="0 12px 40px rgba(27,67,50,0.08)" borderWidth="1px" borderColor="green.100" p={{ base: 6, md: 8 }}>
+            <Box bg="white" borderRadius="2xl" boxShadow="0 12px 40px rgba(27,67,50,0.08)" borderWidth="1px" borderColor="green.100" p={{ base: 5, md: 8 }}>
               <Heading size="lg" color="brand.900" mb={6}>
                 {t.title}
               </Heading>
               <form onSubmit={submit}>
-                <Stack spacing={4}>
+                <Stack spacing={{ base: 5, md: 4 }}>
                   <FormControl isRequired>
                     <FormLabel>{t.fullName}</FormLabel>
-                    <Input value={fullName} onChange={(e) => setFullName(e.target.value)} size="lg" autoComplete="name" />
+                    <Input
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      size="lg"
+                      autoComplete="name"
+                      sx={touchFieldSx}
+                    />
                   </FormControl>
                   <FormControl isRequired>
                     <FormLabel>{t.phone}</FormLabel>
-                    <Input value={phone} onChange={(e) => setPhone(e.target.value)} size="lg" inputMode="numeric" placeholder="09XXXXXXXX" autoComplete="tel" />
+                    <Input
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      size="lg"
+                      inputMode="numeric"
+                      placeholder="09XXXXXXXX"
+                      autoComplete="tel"
+                      sx={touchFieldSx}
+                    />
                     <FormHelperText fontSize="xs">{t.phoneHint}</FormHelperText>
                   </FormControl>
                   <FormControl>
                     <FormLabel>{t.language}</FormLabel>
-                    <Select size="lg" value={langUi} onChange={(e) => setLangUi(e.target.value)}>
+                    <Select size="lg" value={langUi} onChange={(e) => setLangUi(e.target.value)} sx={touchFieldSx}>
                       <option value="Amharic">Amharic / አማርኛ</option>
                       <option value="Afaan Oromoo">Afaan Oromoo</option>
                       <option value="English">English</option>
                     </Select>
                   </FormControl>
-                  <FormControl>
-                    <FormLabel>{t.village}</FormLabel>
-                    <Select size="lg" value={kebele} onChange={(e) => setKebele(e.target.value)}>
-                      {KEBELE_VILLAGES.map((v) => (
-                        <option key={v} value={v}>
-                          {v}
+                  <FormControl isRequired>
+                    <FormLabel>{t.regionState}</FormLabel>
+                    <Select
+                      size="lg"
+                      value={regionId}
+                      onChange={(e) => setRegionId(e.target.value as EthiopiaRegionId)}
+                      sx={touchFieldSx}
+                    >
+                      {ETHIOPIA_REGION_IDS.map((id) => (
+                        <option key={id} value={id}>
+                          {regionLabel(id, locale)}
+                        </option>
+                      ))}
+                    </Select>
+                    <FormHelperText fontSize="sm" color="gray.600" mt={1.5}>
+                      {t.regionHint}
+                    </FormHelperText>
+                  </FormControl>
+                  <FormControl isRequired>
+                    <FormLabel>{t.district}</FormLabel>
+                    <Select
+                      size="lg"
+                      value={String(districtNum)}
+                      onChange={(e) => setDistrictNum(Number(e.target.value))}
+                      sx={touchFieldSx}
+                    >
+                      {DISTRICT_NUMBERS.map((n) => (
+                        <option key={n} value={String(n)}>
+                          {formatDistrictLabel(n, locale)}
                         </option>
                       ))}
                     </Select>
                   </FormControl>
-                  <Checkbox isChecked={consent} onChange={(e) => setConsent(e.target.checked)} colorScheme="green">
+                  <FormControl>
+                    <FormLabel>{t.cropsLabel}</FormLabel>
+                    <SimpleGrid columns={{ base: 2, md: 4 }} spacing={3}>
+                      {CROP_ROWS.map(([key, lc]) => (
+                        <Checkbox
+                          key={key}
+                          isChecked={crops.includes(key)}
+                          onChange={() => toggleCrop(key)}
+                          colorScheme="green"
+                          size="lg"
+                          sx={{ alignItems: "flex-start", ".chakra-checkbox__label": { lineHeight: "1.35", pt: "2px" } }}
+                        >
+                          {t[lc]}
+                        </Checkbox>
+                      ))}
+                    </SimpleGrid>
+                  </FormControl>
+                  <Checkbox
+                    isChecked={consent}
+                    onChange={(e) => setConsent(e.target.checked)}
+                    colorScheme="green"
+                    size="lg"
+                    sx={{ alignItems: "flex-start", ".chakra-checkbox__label": { lineHeight: "1.35", pt: "2px" } }}
+                  >
                     {t.consent}
                   </Checkbox>
-                  <Button type="submit" colorScheme="green" size="lg" w="full" isLoading={busy} isDisabled={!consent || !online}>
+                  <Button
+                    type="submit"
+                    colorScheme="green"
+                    size="lg"
+                    w="full"
+                    minH="52px"
+                    isLoading={busy}
+                    isDisabled={!consent || !online}
+                  >
                     {t.submit}
                   </Button>
                 </Stack>

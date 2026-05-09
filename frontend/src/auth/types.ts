@@ -12,6 +12,10 @@ export type AuthUser = {
   phone: string;
   fullName: string;
   role: UserRole;
+  /** Ethiopian regional state id (e.g. amhara) — kebele / SMS clerks only */
+  smsRegion?: string;
+  /** District 1–9 within that state */
+  smsDistrict?: number;
 };
 
 export function roleHome(role: UserRole): string {

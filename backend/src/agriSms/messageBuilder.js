@@ -1,40 +1,80 @@
 /**
  * Multi-language advisory SMS bodies (SRS §3.3.2).
- * Ethiopian phone display: digits only preview uses +251 → 0…
+ * Sectioned layout — easier to read on low-end phones than long comma‑joined lines.
  */
+
+function dash(val) {
+  const t = String(val ?? "").trim();
+  return t || "—";
+}
+
+/** Prefer language-specific Gemini/worker text; fall back across languages then legacy fields. */
+function pickLangParagraph(advisory, bundleKey, legacyKey, language) {
+  const prefs = [language, "English", "Amharic", "Oromo"];
+  const bundle = advisory[bundleKey];
+  if (bundle && typeof bundle === "object") {
+    for (const p of prefs) {
+      const v = bundle[p];
+      if (typeof v === "string" && v.trim()) return dash(v);
+    }
+  }
+  return dash(advisory[legacyKey]);
+}
 
 const TEMPLATES = {
   Amharic: {
-    header: (kebele) => `የግብርና ምክር - ${kebele} ቀበሌ`,
-    soil: (c, f) => `አፈር፡ ${c}፣ ${f}`,
-    weather: (start, end, sum, alert) =>
-      `ዝናብ፡ ${start} ይጀምራል፣ ${end} ያበቃል። ${sum}${alert && alert !== "None" ? ` ማስጠንቀቂያ፡ ${alert}` : ""}`,
-    crops: (plant, notPlant, advice) =>
-      `ለመትከል፡ ${plant}። አይትከሉ፡ ${notPlant}። ${advice}`,
-    prices: (wheat, teff, maize, barley, trend) =>
-      `ዋጋ (ብር/ኩንታል)፡ ስንዴ ${wheat}፣ ጤፍ ${teff}፣ ማሽ ${maize}፣ ገብስ ${barley}። ሁኔታ፡ ${trend}`,
-    footer: "ተጨማሪ መረጃ ለማግኘት ወደ ቀበሌ ቢሮ ይጠይቁ",
+    header: (kebele) => `የግብርና ምክር — ${kebele} ቀበሌ`,
+    season: (s) => `ወቅት\n· ${s}`,
+    soilBlock: (condition, ph, fertilizer) =>
+      `አፈር እና ማዕድን\n· ሁኔታ፡ ${condition}\n· pH፡ ${ph}\n· ማስፋፋያ / ፔርቲላይዜሽን፡ ${fertilizer}`,
+    weatherBlock: (start, end, sum, alert) => {
+      const range =
+        start !== "—" && end !== "—" ? `ከ ${start} እስከ ${end}` : "—";
+      let b = `ዝናብ እና አየር\n· ጊዜ፡ ${range}\n· ${sum}`;
+      if (alert && alert !== "None") b += `\n· ማስጠንቀቂያ፡ ${alert}`;
+      return b;
+    },
+    cropsBlock: (plant, notPlant, advice) =>
+      `መከር\n· ይትከሉ፡ ${plant}\n· አይትከሉ፡ ${notPlant}\n· ምክር፡ ${advice}`,
+    pricesBlock: (wheat, teff, maize, barley, trend) =>
+      `ዋጋ (ብር / ኩንታል)\n· ስንዴ ${wheat}\n· ጤፍ ${teff}\n· ማሽ ${maize}\n· ገብስ ${barley}\n· አካባቢ ዋጋ፡ ${trend}`,
+    footer: "የበለጠ መረጃ ወደ ቀበሌ ቢሮ ይጠይቁ።",
   },
   Oromo: {
-    header: (kebele) => `Gorsa Qonnaa - Ganda ${kebele}`,
-    soil: (c, f) => `Biyyee: ${c}, ${f} ni gorfama`,
-    weather: (start, end, sum, alert) =>
-      `Bokkaan: ${start} eegala, ${end} xumurama. ${sum}${alert && alert !== "None" ? ` Akeekkachiisa: ${alert}` : ""}`,
-    crops: (plant, notPlant, advice) =>
-      `Facuuf: ${plant}. Hin facin: ${notPlant}. ${advice}`,
-    prices: (wheat, teff, maize, barley, trend) =>
-      `Gatii (Birr/q): Qamadii ${wheat}, Taffii ${teff}, Micira ${maize}, Garbuu ${barley}. Haala: ${trend}`,
-    footer: "Odeeffannoo dabalataa af bilisummaa kee irraa gaafadhu",
+    header: (kebele) => `Gorsa Qonnaa — Ganda ${kebele}`,
+    season: (s) => `Yeroo\n· ${s}`,
+    soilBlock: (condition, ph, fertilizer) =>
+      `Biyyee fi xaa'oo\n· Haala: ${condition}\n· pH: ${ph}\n· Xurii/fertilizer: ${fertilizer}`,
+    weatherBlock: (start, end, sum, alert) => {
+      const range =
+        start !== "—" && end !== "—" ? `${start} irraa ${end}tti` : "—";
+      let b = `Roobaa fi qilleensaa\n· Yeroo: ${range}\n· ${sum}`;
+      if (alert && alert !== "None") b += `\n· Akeekkachiisa: ${alert}`;
+      return b;
+    },
+    cropsBlock: (plant, notPlant, advice) =>
+      `Midhaan\n· Facuuf: ${plant}\n· Hin facin: ${notPlant}\n· Gorsa: ${advice}`,
+    pricesBlock: (wheat, teff, maize, barley, trend) =>
+      `Gatii (Birr / q)\n· Qamadii ${wheat}\n· Taffii ${teff}\n· Micira ${maize}\n· Garbuu ${barley}\n· Haala gatii: ${trend}`,
+    footer: "Odeeffannoo dabalataa bilisummaa kee irraa gaafadhu.",
   },
   English: {
-    header: (kebele) => `Agri advisory - ${kebele} kebele`,
-    soil: (c, f) => `Soil: ${c}. Fertilizer: ${f}`,
-    weather: (start, end, sum, alert) =>
-      `Rain: ${start} to ${end}. ${sum}${alert && alert !== "None" ? ` Alert: ${alert}` : ""}`,
-    crops: (plant, notPlant, advice) => `Plant: ${plant}. Avoid: ${notPlant}. ${advice}`,
-    prices: (wheat, teff, maize, barley, trend) =>
-      `Prices (ETB/q): Wheat ${wheat}, Teff ${teff}, Maize ${maize}, Barley ${barley}. Trend: ${trend}`,
-    footer: "Contact your kebele office for more information",
+    header: (kebele) => `Agri advisory — ${kebele} kebele`,
+    season: (s) => `Season\n· ${s}`,
+    soilBlock: (condition, ph, fertilizer) =>
+      `Soil & fertilizer\n· Condition: ${condition}\n· pH: ${ph}\n· Fertilizer: ${fertilizer}`,
+    weatherBlock: (start, end, sum, alert) => {
+      const range =
+        start !== "—" && end !== "—" ? `${start} → ${end}` : "—";
+      let b = `Rain & weather\n· Window: ${range}\n· ${sum}`;
+      if (alert && alert !== "None") b += `\n· Alert: ${alert}`;
+      return b;
+    },
+    cropsBlock: (plant, notPlant, advice) =>
+      `Crops\n· Plant: ${plant}\n· Avoid: ${notPlant}\n· Advice: ${advice}`,
+    pricesBlock: (wheat, teff, maize, barley, trend) =>
+      `Prices (ETB / q)\n· Wheat ${wheat}\n· Teff ${teff}\n· Maize ${maize}\n· Barley ${barley}\n· Trend: ${trend}`,
+    footer: "Contact your kebele office for more information.",
   },
 };
 
@@ -44,36 +84,46 @@ export function buildAdvisorySms({ advisory, kebeleLabel, language, include }) {
   const k = kebeleLabel || "Bako";
   const parts = [t.header(k)];
 
+  const season = dash(advisory.season);
+  if (season !== "—") parts.push(t.season(season));
+
   if (include.soil) {
-    parts.push(t.soil(advisory.soil_condition || "—", advisory.fertilizer_recommendation || "—"));
+    const fert = pickLangParagraph(
+      advisory,
+      "fertilizer_by_lang",
+      "fertilizer_recommendation",
+      lang,
+    );
+    parts.push(t.soilBlock(dash(advisory.soil_condition), dash(advisory.soil_ph), fert));
   }
   if (include.weather) {
+    const fc = pickLangParagraph(advisory, "forecast_by_lang", "forecast_summary", lang);
     parts.push(
-      t.weather(
-        advisory.rain_start || "—",
-        advisory.rain_end || "—",
-        advisory.forecast_summary || "—",
+      t.weatherBlock(
+        dash(advisory.rain_start),
+        dash(advisory.rain_end),
+        fc,
         advisory.weather_alert || "None",
       ),
     );
   }
   if (include.crops) {
     parts.push(
-      t.crops(
+      t.cropsBlock(
         (advisory.recommended_crops || []).join(", ") || "—",
         (advisory.not_recommended_crops || []).join(", ") || "—",
-        advisory.planting_advice || "—",
+        dash(advisory.planting_advice),
       ),
     );
   }
   if (include.prices) {
     parts.push(
-      t.prices(
+      t.pricesBlock(
         advisory.wheat_price_etb ?? "—",
         advisory.teff_price_etb ?? "—",
         advisory.maize_price_etb ?? "—",
         advisory.barley_price_etb ?? "—",
-        advisory.market_trend || "—",
+        dash(advisory.market_trend),
       ),
     );
   }

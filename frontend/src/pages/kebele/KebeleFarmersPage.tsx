@@ -1,5 +1,6 @@
 import {
   Badge,
+  Box,
   Button,
   FormControl,
   FormLabel,
@@ -27,9 +28,15 @@ import {
   useToast,
 } from "@chakra-ui/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { type EthiopiaRegionId, formatDistrictLabel, regionLabel } from "@/agriSms/constants";
 import { apiFetch } from "@/api/client";
 import { ApiError } from "@/api/errors";
-import { KEBELE_VILLAGES } from "@/agriSms/constants";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  farmerJurisdictionLine,
+  formatJurisdictionLine,
+  resolveSmsWorkerJurisdiction,
+} from "@/pages/kebele/kebeleScope";
 
 type SmsFarmerRow = {
   id: string;
@@ -38,6 +45,8 @@ type SmsFarmerRow = {
   phone_number: string;
   language: string;
   kebele: string;
+  region_state?: string;
+  district_number?: number;
   crops: string[];
   is_active: boolean;
   consent_given: boolean;
@@ -60,9 +69,11 @@ function selectToApiLang(v: string): string {
 
 export function KebeleFarmersPage() {
   const toast = useToast();
+  const { user } = useAuth();
+  const { regionId: scopedRegionId, districtNum: scopedDistrictNum } = resolveSmsWorkerJurisdiction(user);
+
   const [rows, setRows] = useState<SmsFarmerRow[]>([]);
   const [search, setSearch] = useState("");
-  const [kebeleFilter, setKebeleFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const addModal = useDisclosure();
   const editModal = useDisclosure();
@@ -71,7 +82,6 @@ export function KebeleFarmersPage() {
   const [formName, setFormName] = useState("");
   const [formPhone, setFormPhone] = useState("");
   const [formLang, setFormLang] = useState("Amharic");
-  const [formKebele, setFormKebele] = useState<string>(KEBELE_VILLAGES[0]);
   const [formActive, setFormActive] = useState(true);
 
   const load = useCallback(async () => {
@@ -79,7 +89,6 @@ export function KebeleFarmersPage() {
     try {
       const q = new URLSearchParams();
       if (search.trim()) q.set("search", search.trim());
-      if (kebeleFilter !== "all") q.set("kebele", kebeleFilter);
       const path = `/api/v1/agri-sms/farmers${q.toString() ? `?${q}` : ""}`;
       const data = await apiFetch<{ farmers: SmsFarmerRow[] }>(path);
       setRows(data.farmers);
@@ -88,7 +97,7 @@ export function KebeleFarmersPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, kebeleFilter, toast]);
+  }, [search, toast]);
 
   useEffect(() => {
     void load();
@@ -99,18 +108,20 @@ export function KebeleFarmersPage() {
       setFormName(f.full_name);
       setFormPhone(f.phone_number.startsWith("+251") ? `0${f.phone_number.slice(4)}` : f.phone_number);
       setFormLang(apiLangToSelect(f.language));
-      setFormKebele(f.kebele);
       setFormActive(f.is_active);
     } else {
       setFormName("");
       setFormPhone("");
       setFormLang("Amharic");
-      setFormKebele(KEBELE_VILLAGES[0]);
       setFormActive(true);
     }
   }
 
   async function submitAdd() {
+    if (!scopedRegionId || scopedDistrictNum == null) {
+      toast({ status: "warning", title: "Missing jurisdiction on your account." });
+      return;
+    }
     try {
       await apiFetch("/api/v1/agri-sms/farmers", {
         method: "POST",
@@ -118,7 +129,8 @@ export function KebeleFarmersPage() {
           full_name: formName.trim(),
           phone_number: formPhone.trim(),
           language: selectToApiLang(formLang),
-          kebele: formKebele,
+          region_state: scopedRegionId,
+          district_number: scopedDistrictNum,
           crops: [],
         }),
       });
@@ -140,7 +152,6 @@ export function KebeleFarmersPage() {
           full_name: formName.trim(),
           phone_number: formPhone.trim(),
           language: selectToApiLang(formLang),
-          kebele: formKebele,
           is_active: formActive,
           crops: editing.crops,
         }),
@@ -167,27 +178,21 @@ export function KebeleFarmersPage() {
 
   const tableRows = useMemo(() => rows, [rows]);
 
+  const jurisdictionLine = formatJurisdictionLine(scopedRegionId, scopedDistrictNum, "en");
+
   return (
     <Stack spacing={6}>
       <Text fontWeight="700" fontSize="xl" color="brand.900">
         Farmers
+      </Text>
+      <Text fontSize="sm" color="gray.700" bg="green.50" borderRadius="md" px={3} py={2} borderWidth="1px" borderColor="green.100">
+        Your desk shows only farmers in <strong>{jurisdictionLine}</strong> (from your login scope).
       </Text>
 
       <HStack spacing={3} wrap="wrap" align="flex-end">
         <FormControl maxW="220px">
           <FormLabel fontSize="sm">Search</FormLabel>
           <Input size="md" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name or phone" />
-        </FormControl>
-        <FormControl maxW="180px">
-          <FormLabel fontSize="sm">Village</FormLabel>
-          <Select size="md" value={kebeleFilter} onChange={(e) => setKebeleFilter(e.target.value)}>
-            <option value="all">All</option>
-            {KEBELE_VILLAGES.map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </Select>
         </FormControl>
         <Button colorScheme="green" variant="outline" onClick={() => void load()} isLoading={loading}>
           Apply
@@ -211,7 +216,8 @@ export function KebeleFarmersPage() {
               <Th>Name</Th>
               <Th>Phone</Th>
               <Th>Lang</Th>
-              <Th>Village</Th>
+              <Th>Region</Th>
+              <Th>District</Th>
               <Th>Status</Th>
               <Th />
             </Tr>
@@ -225,7 +231,12 @@ export function KebeleFarmersPage() {
                 <Td>{f.full_name}</Td>
                 <Td>{f.phone_number}</Td>
                 <Td>{f.language === "Oromo" ? "Oromoo" : f.language}</Td>
-                <Td>{f.kebele}</Td>
+                <Td fontSize="sm">
+                  {f.region_state ? regionLabel(f.region_state as EthiopiaRegionId, "en") : "—"}
+                </Td>
+                <Td fontSize="sm">
+                  {f.district_number != null ? formatDistrictLabel(f.district_number, "en") : "—"}
+                </Td>
                 <Td>
                   <Badge colorScheme={f.is_active ? "green" : "red"}>{f.is_active ? "Active" : "Inactive"}</Badge>
                 </Td>
@@ -281,14 +292,19 @@ export function KebeleFarmersPage() {
                 </Select>
               </FormControl>
               <FormControl>
-                <FormLabel>Village</FormLabel>
-                <Select value={formKebele} onChange={(e) => setFormKebele(e.target.value)}>
-                  {KEBELE_VILLAGES.map((v) => (
-                    <option key={v} value={v}>
-                      {v}
-                    </option>
-                  ))}
-                </Select>
+                <FormLabel>Jurisdiction</FormLabel>
+                <Box
+                  px={3}
+                  py={2.5}
+                  borderWidth="1px"
+                  borderRadius="md"
+                  borderColor="gray.200"
+                  bg="gray.50"
+                >
+                  <Text fontSize="sm" fontWeight="500" color="gray.800">
+                    {jurisdictionLine}
+                  </Text>
+                </Box>
               </FormControl>
             </Stack>
           </ModalBody>
@@ -334,16 +350,23 @@ export function KebeleFarmersPage() {
                   ))}
                 </Select>
               </FormControl>
-              <FormControl>
-                <FormLabel>Village</FormLabel>
-                <Select value={formKebele} onChange={(e) => setFormKebele(e.target.value)}>
-                  {KEBELE_VILLAGES.map((v) => (
-                    <option key={v} value={v}>
-                      {v}
-                    </option>
-                  ))}
-                </Select>
-              </FormControl>
+              {editing ? (
+                <FormControl>
+                  <FormLabel>Jurisdiction</FormLabel>
+                  <Box
+                    px={3}
+                    py={2.5}
+                    borderWidth="1px"
+                    borderRadius="md"
+                    borderColor="gray.200"
+                    bg="gray.50"
+                  >
+                    <Text fontSize="sm" fontWeight="500" color="gray.800">
+                      {farmerJurisdictionLine(editing, "en")}
+                    </Text>
+                  </Box>
+                </FormControl>
+              ) : null}
               <FormControl display="flex" alignItems="center">
                 <FormLabel mb={0}>Active</FormLabel>
                 <Switch isChecked={formActive} onChange={(e) => setFormActive(e.target.checked)} colorScheme="green" />

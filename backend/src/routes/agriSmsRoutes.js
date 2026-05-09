@@ -2,8 +2,11 @@ import { randomUUID } from "crypto";
 import { Router } from "express";
 import { authenticateJwt, authorizeRoles } from "../middleware/authJwt.js";
 import { buildAdvisorySms, estimateSegments } from "../agriSms/messageBuilder.js";
+import { generateAdvisoryDraftWithGemini } from "../agriSms/geminiAdvisory.js";
+import { smsHeaderAreaEnglish } from "../agriSms/ethiopiaRegions.js";
 import {
   agriSmsStore,
+  buildGeminiContextForScope,
   filterTargets,
   insertBroadcast,
   listFarmers,
@@ -17,6 +20,17 @@ import {
 export const agriSmsPublicRouter = Router();
 export const agriSmsWorkerRouter = Router();
 
+function clerkSmsScope(auth) {
+  if (auth?.role !== "kebele_worker") return null;
+  let r = auth.sms_region;
+  let d = auth.sms_district;
+  if (r == null || r === "" || d == null || d === "") {
+    r = "amhara";
+    d = 3;
+  }
+  return { region: String(r), district: Number(d) };
+}
+
 function mapSmsErr(res, err) {
   const c = err.code ?? err.message;
   switch (c) {
@@ -28,6 +42,16 @@ function mapSmsErr(res, err) {
       return res.status(400).json({ error: "invalid_name", message: "Enter full name." });
     case "CONSENT_REQUIRED":
       return res.status(400).json({ error: "consent_required", message: "Consent is required." });
+    case "INVALID_REGION_STATE":
+      return res.status(400).json({
+        error: "invalid_region_state",
+        message: "Pick a regional state from the list.",
+      });
+    case "INVALID_DISTRICT":
+      return res.status(400).json({
+        error: "invalid_district",
+        message: "Pick District 1–9.",
+      });
     default:
       console.error(err);
       return res.status(500).json({ error: "server_error", message: "Something went wrong." });
@@ -47,6 +71,8 @@ agriSmsPublicRouter.post("/farmers/register", (req, res) => {
         phone_number: farmer.phone_number,
         language: farmer.language,
         kebele: farmer.kebele,
+        region_state: farmer.region_state,
+        district_number: farmer.district_number,
         crops: farmer.crops,
         registered_at: farmer.registered_at,
       },
@@ -61,17 +87,19 @@ agriSmsWorkerRouter.use(authenticateJwt, authorizeRoles("kebele_worker"));
 
 agriSmsWorkerRouter.get("/farmers", (req, res) => {
   const search = req.query.search;
-  const kebele = req.query.kebele;
-  const rows = listFarmers({ search: search ?? "", kebele: kebele ?? "all" });
+  const rows = listFarmers({ search: search ?? "", workerScope: clerkSmsScope(req.auth) });
   res.json({ ok: true, farmers: rows, total: rows.length });
 });
 
 agriSmsWorkerRouter.post("/farmers", (req, res) => {
   try {
+    const scope = clerkSmsScope(req.auth);
     const farmer = registerSmsFarmer(
       {
         ...req.body,
         phone_number: req.body?.phone ?? req.body?.phone_number,
+        region_state: req.body?.region_state ?? scope?.region,
+        district_number: req.body?.district_number ?? scope?.district,
         consent_given: true,
       },
       req.auth.sub,
@@ -110,10 +138,47 @@ agriSmsWorkerRouter.post("/advisories", (req, res) => {
   res.json({ ok: true, advisory });
 });
 
+/** Draft season + fertilizer + weather from Gemini using aggregated cohort (region/district/crops). */
+agriSmsWorkerRouter.post("/advisories/ai-draft", async (req, res) => {
+  const scope = clerkSmsScope(req.auth);
+  const ctx =
+    scope != null ? buildGeminiContextForScope(scope.region, scope.district) : buildGeminiContextForScope("amhara", 3);
+  if (!process.env.GEMINI_API_KEY?.trim()) {
+    return res.status(503).json({
+      ok: false,
+      error: "no_gemini",
+      message: "Set GEMINI_API_KEY on the server to enable AI drafts.",
+      context_preview: ctx,
+    });
+  }
+  try {
+    const draft = await generateAdvisoryDraftWithGemini(ctx);
+    return res.json({
+      ok: true,
+      provider: "gemini",
+      context_used: ctx,
+      draft,
+    });
+  } catch (err) {
+    const code = err.code ?? err.message;
+    if (code === "NO_GEMINI") {
+      return res.status(503).json({ ok: false, error: "no_gemini", message: "GEMINI_API_KEY missing." });
+    }
+    console.error("[gemini advisory]", err);
+    return res.status(502).json({
+      ok: false,
+      error: "gemini_failed",
+      message: typeof err.message === "string" ? err.message : "Gemini error.",
+    });
+  }
+});
+
 /** Preview SMS bodies */
 agriSmsWorkerRouter.post("/broadcasts/preview", (req, res) => {
   const advisory = req.body?.advisory ? { ...agriSmsStore.currentAdvisory, ...req.body.advisory } : agriSmsStore.currentAdvisory;
-  const kebele = req.body?.kebele ?? "Bako";
+  const scope = clerkSmsScope(req.auth);
+  const kebele =
+    scope != null ? smsHeaderAreaEnglish(scope.region, scope.district) : String(req.body?.kebele ?? "Ethiopia");
   const include = {
     soil: Boolean(req.body?.include?.soil ?? true),
     weather: Boolean(req.body?.include?.weather ?? true),
@@ -141,14 +206,16 @@ agriSmsWorkerRouter.post("/broadcasts/preview", (req, res) => {
 agriSmsWorkerRouter.post("/broadcasts", (req, res) => {
   const advisory = agriSmsStore.currentAdvisory;
   const filters = req.body?.target_filters ?? { all_farmers: true };
-  const targets = filterTargets(filters);
+  const targets = filterTargets(filters, clerkSmsScope(req.auth));
   const include = {
     soil: Boolean(req.body?.include?.soil ?? true),
     weather: Boolean(req.body?.include?.weather ?? true),
     crops: Boolean(req.body?.include?.crops ?? true),
     prices: Boolean(req.body?.include?.prices ?? true),
   };
-  const kebeleFocus = filters.kebeles?.[0] ?? "Bako";
+  const scope = clerkSmsScope(req.auth);
+  const kebeleFocus =
+    scope != null ? smsHeaderAreaEnglish(scope.region, scope.district) : String(filters.kebeles?.[0] ?? "Ethiopia");
 
   const message_amharic = buildAdvisorySms({
     advisory,

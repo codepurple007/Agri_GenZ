@@ -22,16 +22,36 @@ function logSmsPlaceholder(phone, code) {
 }
 
 export function signToken(user) {
-  return jwt.sign(
-    {
-      sub: user.id,
-      phone: user.phone_e164,
-      role: user.role,
-      name: user.full_name,
-    },
-    JWT_SECRET,
-    { expiresIn: JWT_EXPIRES },
-  );
+  /** @type {Record<string, unknown>} */
+  const payload = {
+    sub: user.id,
+    phone: user.phone_e164,
+    role: user.role,
+    name: user.full_name,
+  };
+  if (user.sms_region != null && String(user.sms_region).trim()) {
+    payload.sms_region = String(user.sms_region).trim();
+  }
+  if (user.sms_district != null && user.sms_district !== "") {
+    const d = Number(user.sms_district);
+    if (Number.isInteger(d) && d >= 1 && d <= 9) payload.sms_district = d;
+  }
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES });
+}
+
+function staffUserJson(row) {
+  const base = {
+    id: row.id,
+    phone: row.phone_e164,
+    fullName: row.full_name,
+    role: row.role,
+  };
+  if (row.sms_region != null && row.sms_region !== "") Object.assign(base, { smsRegion: String(row.sms_region) });
+  if (row.sms_district != null && row.sms_district !== "") {
+    const d = Number(row.sms_district);
+    if (Number.isInteger(d)) Object.assign(base, { smsDistrict: d });
+  }
+  return base;
 }
 
 export function verifyToken(token) {
@@ -223,6 +243,8 @@ export async function staffLogin({ username, password }) {
       phone_e164: "+251900000006",
       full_name: "Almaz D. (Kebele worker)",
       role: "kebele_worker",
+      sms_region: "amhara",
+      sms_district: 3,
     };
   } else {
     const err = new Error("invalid_credentials");
@@ -232,12 +254,7 @@ export async function staffLogin({ username, password }) {
 
   const token = signToken(row);
   return {
-    user: {
-      id: row.id,
-      phone: row.phone_e164,
-      fullName: row.full_name,
-      role: row.role,
-    },
+    user: staffUserJson(row),
     token,
   };
 }

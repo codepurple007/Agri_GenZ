@@ -17,7 +17,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiFetch } from "@/api/client";
 import { ApiError } from "@/api/errors";
-import { KEBELE_VILLAGES } from "@/agriSms/constants";
+import { useAuth } from "@/hooks/useAuth";
+import { formatJurisdictionLine, resolveSmsWorkerJurisdiction } from "@/pages/kebele/kebeleScope";
 
 type SmsFarmerRow = {
   id: string;
@@ -37,9 +38,10 @@ type PreviewRes = {
 export function KebeleBroadcastPage() {
   const toast = useToast();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { regionId: scopedRegionId, districtNum: scopedDistrictNum } = resolveSmsWorkerJurisdiction(user);
+
   const [farmers, setFarmers] = useState<SmsFarmerRow[]>([]);
-  const [allFarmers, setAllFarmers] = useState(true);
-  const [chosenVillages, setChosenVillages] = useState<string[]>(() => [...KEBELE_VILLAGES]);
 
   const [incSoil, setIncSoil] = useState(true);
   const [incWeather, setIncWeather] = useState(true);
@@ -49,21 +51,20 @@ export function KebeleBroadcastPage() {
   const [previewLang, setPreviewLang] = useState<PreviewLang>("Amharic");
   const [previewMsg, setPreviewMsg] = useState("");
   const [previewSeg, setPreviewSeg] = useState<number | null>(null);
+  const [cachedPreviewMsgs, setCachedPreviewMsgs] = useState<Record<string, string> | null>(null);
+  const [cachedPreviewSegs, setCachedPreviewSegs] = useState<Record<string, number> | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
   const [sendBusy, setSendBusy] = useState(false);
 
-  const previewKebele = useMemo(
-    () => (allFarmers ? KEBELE_VILLAGES[0] : chosenVillages[0] ?? KEBELE_VILLAGES[0]),
-    [allFarmers, chosenVillages],
+  const jurisdictionLine =
+    scopedRegionId != null && scopedDistrictNum != null
+      ? formatJurisdictionLine(scopedRegionId, scopedDistrictNum, "en")
+      : "Your district";
+
+  const eligible = useMemo(
+    () => farmers.filter((f) => f.is_active && f.consent_given),
+    [farmers],
   );
-
-  const eligible = useMemo(() => {
-    const base = farmers.filter((f) => f.is_active && f.consent_given);
-    if (allFarmers) return base;
-    if (!chosenVillages.length) return [];
-    return base.filter((f) => chosenVillages.includes(f.kebele));
-  }, [farmers, allFarmers, chosenVillages]);
-
   const eligibleCount = eligible.length;
 
   const estCostPreview = previewSeg != null ? eligibleCount * previewSeg : null;
@@ -81,19 +82,23 @@ export function KebeleBroadcastPage() {
     void loadFarmers();
   }, [loadFarmers]);
 
-  function toggleVillage(v: string) {
-    setChosenVillages((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]));
-  }
+  useEffect(() => {
+    if (!cachedPreviewMsgs || !cachedPreviewSegs) return;
+    const key = previewLang === "English" ? "English" : previewLang === "Oromo" ? "Oromo" : "Amharic";
+    setPreviewMsg(cachedPreviewMsgs[key] ?? "");
+    setPreviewSeg(cachedPreviewSegs[key] ?? null);
+  }, [previewLang, cachedPreviewMsgs, cachedPreviewSegs]);
 
   async function runPreview() {
     setPreviewBusy(true);
     setPreviewSeg(null);
     setPreviewMsg("");
+    setCachedPreviewMsgs(null);
+    setCachedPreviewSegs(null);
     try {
       const data = await apiFetch<PreviewRes>("/api/v1/agri-sms/broadcasts/preview", {
         method: "POST",
         body: JSON.stringify({
-          kebele: previewKebele,
           include: {
             soil: incSoil,
             weather: incWeather,
@@ -102,6 +107,8 @@ export function KebeleBroadcastPage() {
           },
         }),
       });
+      setCachedPreviewMsgs(data.messages);
+      setCachedPreviewSegs(data.segments);
       const key = previewLang === "English" ? "English" : previewLang === "Oromo" ? "Oromo" : "Amharic";
       setPreviewMsg(data.messages[key] ?? "");
       setPreviewSeg(data.segments[key] ?? null);
@@ -114,13 +121,8 @@ export function KebeleBroadcastPage() {
   }
 
   async function send() {
-    if (!allFarmers && !chosenVillages.length) {
-      toast({ status: "warning", title: "Pick a village." });
-      return;
-    }
     setSendBusy(true);
     try {
-      const filters = allFarmers ? { all_farmers: true } : { kebeles: chosenVillages };
       const data = await apiFetch<{ ok: boolean; broadcast: { id: string } }>("/api/v1/agri-sms/broadcasts", {
         method: "POST",
         body: JSON.stringify({
@@ -130,7 +132,7 @@ export function KebeleBroadcastPage() {
             crops: incCrops,
             prices: incPrices,
           },
-          target_filters: filters,
+          target_filters: { all_farmers: true },
         }),
       });
       toast({ status: "success", title: "Queued." });
@@ -148,6 +150,9 @@ export function KebeleBroadcastPage() {
       <Heading size="lg" color="brand.900">
         Broadcast
       </Heading>
+      <Text fontSize="sm" color="gray.700">
+        Messages go to consenting farmers in <strong>{jurisdictionLine}</strong> only — same cohort as your farmer list.
+      </Text>
 
       <Stack spacing={4} bg="white" p={6} borderRadius="lg" borderWidth="1px" borderColor="gray.100">
         <Text fontWeight="700">Include</Text>
@@ -169,25 +174,9 @@ export function KebeleBroadcastPage() {
 
       <Stack spacing={4} bg="white" p={6} borderRadius="lg" borderWidth="1px" borderColor="gray.100">
         <Text fontWeight="700">Audience</Text>
-        <Checkbox isChecked={allFarmers} onChange={(e) => setAllFarmers(e.target.checked)} colorScheme="green">
-          All active ({farmers.filter((f) => f.is_active && f.consent_given).length})
-        </Checkbox>
-        {!allFarmers ? (
-          <Stack spacing={2} pl={2}>
-            <HStack spacing={4} wrap="wrap">
-              {KEBELE_VILLAGES.map((v) => (
-                <Checkbox
-                  key={v}
-                  isChecked={chosenVillages.includes(v)}
-                  onChange={() => toggleVillage(v)}
-                  colorScheme="green"
-                >
-                  {v}
-                </Checkbox>
-              ))}
-            </HStack>
-          </Stack>
-        ) : null}
+        <Text fontSize="sm" color="gray.700">
+          All eligible farmers currently listed for your jurisdiction ({eligibleCount}).
+        </Text>
         <HStack spacing={6} pt={2} flexWrap="wrap">
           <Text fontSize="sm" fontWeight="600">
             Recipients: {eligibleCount}
@@ -211,7 +200,7 @@ export function KebeleBroadcastPage() {
           </Select>
         </FormControl>
         <Text fontSize="xs" color="gray.500">
-          {previewKebele}
+          {jurisdictionLine}
         </Text>
         <Button colorScheme="green" variant="outline" maxW="xs" onClick={() => void runPreview()} isLoading={previewBusy}>
           Preview

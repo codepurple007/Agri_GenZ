@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { isValidRegionId, normalizeDistrictNumber, smsHeaderAreaEnglish } from "./ethiopiaRegions.js";
 
 /** In-memory SMS registry & advisories — demo aligned with Agricultural Advisory SRS (no PostgreSQL required). */
 
@@ -12,10 +13,20 @@ export const agriSmsStore = {
     season: "Meher 2026",
     soil_condition: "Normal",
     fertilizer_recommendation: "Apply NPS at planting, 100kg/hectare",
+    fertilizer_by_lang: {
+      Amharic: "",
+      Oromo: "",
+      English: "Apply NPS at planting, 100kg/hectare",
+    },
     soil_ph: "Neutral",
     rain_start: "2026-06-15",
     rain_end: "2026-09-30",
     forecast_summary: "Normal rainfall expected. No extreme weather.",
+    forecast_by_lang: {
+      Amharic: "",
+      Oromo: "",
+      English: "Normal rainfall expected. No extreme weather.",
+    },
     weather_alert: "None",
     recommended_crops: ["Wheat", "Teff", "Maize"],
     not_recommended_crops: ["Barley (rust risk)"],
@@ -80,13 +91,28 @@ export function registerSmsFarmer(body, registeredById) {
   const language =
     langIn === "Oromo" || langIn.startsWith("Afaan") ? "Oromo" : langIn === "English" ? "English" : "Amharic";
 
+  const regionRaw = String(body.region_state ?? "").trim();
+  if (!isValidRegionId(regionRaw)) {
+    const err = new Error("bad_region");
+    err.code = "INVALID_REGION_STATE";
+    throw err;
+  }
+  const distr = normalizeDistrictNumber(body.district_number ?? body.district);
+  if (distr == null) {
+    const err = new Error("bad_district");
+    err.code = "INVALID_DISTRICT";
+    throw err;
+  }
+
   const farmer = {
     id: randomUUID(),
     farmer_code: nextFarmerCode(),
     full_name: name,
     phone_number: phoneE164,
     language,
-    kebele: String(body.kebele ?? "Bako").trim() || "Bako",
+    region_state: regionRaw,
+    district_number: distr,
+    kebele: `${regionRaw}-d${distr}`,
     crops: Array.isArray(body.crops) ? body.crops.map(String) : [],
     is_active: true,
     registered_by: registeredById ?? null,
@@ -103,8 +129,49 @@ export function registerSmsFarmer(body, registeredById) {
   return farmer;
 }
 
+export function buildGeminiContextForScope(region, district) {
+  const r = String(region ?? "").trim();
+  const d = normalizeDistrictNumber(district);
+  const rows = agriSmsStore.farmers.filter(
+    (f) =>
+      f.is_active &&
+      f.consent_given &&
+      f.region_state === r &&
+      (d == null ? true : Number(f.district_number) === d),
+  );
+  const crops = new Map();
+  for (const f of rows) {
+    for (const c of f.crops ?? []) {
+      crops.set(c, (crops.get(c) ?? 0) + 1);
+    }
+  }
+  return {
+    region_state: r,
+    district_number: d,
+    legacy_area_tag: `${r}-d${d}`,
+    area_summary: d != null ? smsHeaderAreaEnglish(r, d) : r,
+    active_farmer_count: rows.length,
+    language_breakdown: rows.reduce((acc, f) => {
+      acc[f.language] = (acc[f.language] ?? 0) + 1;
+      return acc;
+    }, {}),
+    crop_counts: Object.fromEntries(crops),
+    signup_locations_sample: [],
+    note:
+      "Synthesize regional season timing, fertilizer guidance, and a cautious rain outlook for SMS to mixed literacy farmers.",
+  };
+}
+
 export function listFarmers(filters) {
   let rows = [...agriSmsStore.farmers];
+  const scope = filters.workerScope;
+  if (scope?.region) {
+    rows = rows.filter((f) => f.region_state === scope.region);
+  }
+  if (scope?.district != null && scope.district !== "") {
+    const dn = normalizeDistrictNumber(scope.district);
+    if (dn != null) rows = rows.filter((f) => Number(f.district_number) === dn);
+  }
   const q = String(filters.search ?? "").trim().toLowerCase();
   if (q) {
     rows = rows.filter(
@@ -114,8 +181,6 @@ export function listFarmers(filters) {
         f.farmer_code.toLowerCase().includes(q),
     );
   }
-  const kebele = filters.kebele;
-  if (kebele && kebele !== "all") rows = rows.filter((f) => f.kebele === kebele);
   return rows;
 }
 
@@ -124,7 +189,26 @@ export function updateFarmer(id, patch, allowDeactivate) {
   if (!f) return null;
   if (patch.full_name != null) f.full_name = String(patch.full_name).trim();
   if (patch.language != null) f.language = String(patch.language);
-  if (patch.kebele != null) f.kebele = String(patch.kebele).trim();
+  if (patch.region_state != null && isValidRegionId(String(patch.region_state).trim())) {
+    f.region_state = String(patch.region_state).trim();
+  }
+  if (patch.district_number != null) {
+    const dn = normalizeDistrictNumber(patch.district_number);
+    if (dn != null) f.district_number = dn;
+  }
+  if (patch.kebele != null) {
+    /* legacy compound */
+    const s = String(patch.kebele).trim();
+    if (s) f.kebele = s;
+    const m = s.match(/^([\w]+)-d(\d)$/i);
+    if (m && isValidRegionId(m[1])) {
+      f.region_state = m[1];
+      f.district_number = Number(m[2]);
+    }
+  }
+  if (f.region_state != null && f.district_number != null) {
+    f.kebele = `${f.region_state}-d${f.district_number}`;
+  }
   if (patch.crops != null) f.crops = Array.isArray(patch.crops) ? patch.crops : [];
   if (patch.is_active != null && allowDeactivate) f.is_active = Boolean(patch.is_active);
   const np = normalizeSmsPhone(patch.phone_number ?? patch.phone);
@@ -145,6 +229,14 @@ export function saveAdvisory(input) {
   const merged = {
     ...cur,
     ...input,
+    fertilizer_by_lang:
+      input.fertilizer_by_lang != null && typeof input.fertilizer_by_lang === "object"
+        ? { ...(cur.fertilizer_by_lang ?? {}), ...input.fertilizer_by_lang }
+        : cur.fertilizer_by_lang,
+    forecast_by_lang:
+      input.forecast_by_lang != null && typeof input.forecast_by_lang === "object"
+        ? { ...(cur.forecast_by_lang ?? {}), ...input.forecast_by_lang }
+        : cur.forecast_by_lang,
     recommended_crops: input.recommended_crops ?? cur.recommended_crops,
     not_recommended_crops: input.not_recommended_crops ?? cur.not_recommended_crops,
     wheat_price_etb: input.wheat_price_etb != null ? Number(input.wheat_price_etb) : cur.wheat_price_etb,
@@ -172,22 +264,29 @@ export function getBroadcastLogs(id) {
   return agriSmsStore.smsLogsByBroadcastId.get(id) ?? [];
 }
 
-export function filterTargets(filters) {
+export function filterTargets(filters, workerScope = null) {
   let rows = agriSmsStore.farmers.filter((f) => f.is_active && f.consent_given);
+  if (workerScope?.region) {
+    rows = rows.filter((f) => f.region_state === workerScope.region);
+  }
+  if (workerScope?.district != null && workerScope.district !== "") {
+    const dn = normalizeDistrictNumber(workerScope.district);
+    if (dn != null) rows = rows.filter((f) => Number(f.district_number) === dn);
+  }
   if (filters.all_farmers) return rows;
-
-  const kebes = filters.kebeles ?? [];
-  if (kebes.length) rows = rows.filter((f) => kebes.includes(f.kebele));
 
   const crops = filters.crops ?? [];
   if (crops.length) {
     rows = rows.filter((f) => f.crops.some((c) => crops.includes(c)));
+    return rows;
   }
-  if (!kebes.length && !crops.length) return [];
-  return rows;
+  return [];
 }
 
-/** Seed demo farmers row so UI is populated */
+/** Demo clerks (`kebele` login) scope: Amhara, district 3 — seed matched + a few outsiders */
+const DEMO_RG = "amhara";
+const DEMO_D = 3;
+
 [
   ["Bekele T.", "+251912345678", "Amharic"],
   ["Tigist A.", "+251923456789", "Oromo"],
@@ -201,7 +300,8 @@ export function filterTargets(filters) {
         full_name,
         phone_number: phone.replace("+251", "0"),
         language,
-        kebele: idx % 2 === 0 ? "Bako" : "Guto Gida",
+        region_state: DEMO_RG,
+        district_number: DEMO_D,
         crops: [["Wheat", "Teff"], ["Teff"], ["Wheat", "Maize"], ["Teff", "Maize"], ["Wheat"]][idx],
         consent_given: true,
       },
@@ -214,3 +314,37 @@ export function filterTargets(filters) {
     /* ignore duplicate on hot reload */
   }
 });
+
+try {
+  registerSmsFarmer(
+    {
+      full_name: "Out Of Scope Demo",
+      phone_number: "0977777777",
+      language: "Amharic",
+      region_state: "oromia",
+      district_number: 1,
+      crops: [],
+      consent_given: true,
+    },
+    null,
+  );
+} catch {
+  /* dup */
+}
+
+try {
+  registerSmsFarmer(
+    {
+      full_name: "Wrong District Demo",
+      phone_number: "0966666666",
+      language: "Amharic",
+      region_state: DEMO_RG,
+      district_number: 7,
+      crops: ["Teff"],
+      consent_given: true,
+    },
+    null,
+  );
+} catch {
+  /* dup */
+}

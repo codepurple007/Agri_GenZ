@@ -156,6 +156,10 @@ authRouter.get("/me", async (req, res) => {
       phone: user.phone_e164,
       fullName: user.full_name,
       role: user.role,
+      ...(payload.sms_region != null && String(payload.sms_region)
+        ? { smsRegion: String(payload.sms_region) }
+        : {}),
+      ...(payload.sms_district != null ? { smsDistrict: Number(payload.sms_district) } : {}),
     },
   });
 });

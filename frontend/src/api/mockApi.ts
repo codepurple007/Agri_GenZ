@@ -4,6 +4,7 @@
 import type { AuthUser } from "@/auth/types";
 import { ApiError } from "@/api/errors";
 import { tryHandleAgriSms } from "@/api/agriSmsMockApi";
+import { tryHandleGeo } from "@/api/geoMockApi";
 
 export const USE_MOCK_API = import.meta.env.VITE_USE_REAL_API !== "true";
 
@@ -88,6 +89,8 @@ const STAFF_DEMOS: Record<
       phone: "+251900000006",
       fullName: "Almaz D. (Kebele worker)",
       role: "kebele_worker",
+      smsRegion: "amhara",
+      smsDistrict: 3,
     },
   },
 };
@@ -134,6 +137,9 @@ export async function runMockApi<T>(path: string, init?: RequestInit): Promise<T
       updatedAt: new Date().toISOString(),
     } as T;
   }
+
+  const geoHandled = tryHandleGeo<T>(pathname, search, method);
+  if (geoHandled !== undefined) return geoHandled;
 
   const agriHandled = tryHandleAgriSms<T>(pathname, search, method, body, parseJson, readMockSessionUser());
   if (agriHandled !== undefined) return agriHandled;

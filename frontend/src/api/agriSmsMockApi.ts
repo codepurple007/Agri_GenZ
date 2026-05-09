@@ -1,8 +1,48 @@
 /**
  * Demo in-memory Agricultural Advisory SMS API (parity with backend/src/agriSms).
  */
+import { DEMO_KEBELE_SCOPE, ETHIOPIA_REGION_IDS } from "@/agriSms/constants";
 import type { AuthUser } from "@/auth/types";
 import { ApiError } from "@/api/errors";
+
+const REGION_EN_TITLE: Record<string, string> = {
+  addis_ababa: "Addis Ababa",
+  afar: "Afar",
+  amhara: "Amhara",
+  benishangul_gumuz: "Benishangul-Gumuz",
+  central_ethiopia: "Central Ethiopia",
+  dire_dawa: "Dire Dawa",
+  gambella: "Gambella",
+  harari: "Harari",
+  oromia: "Oromia",
+  sidama: "Sidama",
+  somali: "Somali",
+  snnpr: "SNNPR",
+  south_west_ethiopia_peoples: "South West Ethiopia Peoples",
+  tigray: "Tigray",
+};
+
+function smsAreaEnglish(regionId: string, districtNum: number): string {
+  const t = REGION_EN_TITLE[regionId] ?? regionId;
+  return `${t} · District ${districtNum}`;
+}
+
+function isValidEthRegion(id: string): boolean {
+  return (ETHIOPIA_REGION_IDS as readonly string[]).includes(id);
+}
+
+function normDistrictMock(n: unknown): number | null {
+  const x = Number(n);
+  if (!Number.isInteger(x) || x < 1 || x > 9) return null;
+  return x;
+}
+
+function clerkSmsScope(session: AuthUser | null): { region: string; district: number } | null {
+  if (!session?.smsRegion || session.smsDistrict == null) {
+    return { region: DEMO_KEBELE_SCOPE.region, district: DEMO_KEBELE_SCOPE.district };
+  }
+  return { region: session.smsRegion, district: Number(session.smsDistrict) };
+}
 
 export type MockSmsFarmer = {
   id: string;
@@ -10,6 +50,9 @@ export type MockSmsFarmer = {
   full_name: string;
   phone_number: string;
   language: string;
+  region_state: string;
+  district_number: number;
+  /** Legacy compound `region-d{n}` — matches backend */
   kebele: string;
   crops: string[];
   is_active: boolean;
@@ -31,10 +74,20 @@ let advisory: Advisory = {
   season: "Meher 2026",
   soil_condition: "Normal",
   fertilizer_recommendation: "Apply NPS at planting, 100kg/hectare",
+  fertilizer_by_lang: {
+    Amharic: "በመትከያ ጊዜ ኤንፒኤስ ይጠቀሙ፤ በአንቀሳቃሽ ደረጃ ዩሪያ የላይ ሽፋን እንደ ምክር ይጠቀሙ።",
+    Oromo: "Yeroo facaa NPS fayyadami; yeroo dafinsa urea akka gorsa ol'aanaa irratti dabaladhu.",
+    English: "Apply NPS at planting, 100kg/hectare",
+  },
   soil_ph: "Neutral",
   rain_start: "2026-06-15",
   rain_end: "2026-09-30",
   forecast_summary: "Normal rainfall expected. No extreme weather.",
+  forecast_by_lang: {
+    Amharic: "ዝናብ በተለምዶው ኪረምት ውስጥ ሊታይ ይችላል፤ ጠብታዎች ሊኖሩ ይችላሉ።",
+    Oromo: "Bokkaan yeroo abbootiin yeroo amalaatiin ni dhufu; yeroo goggogaa ni uumama.",
+    English: "Normal rainfall expected. No extreme weather.",
+  },
   weather_alert: "None",
   recommended_crops: ["Wheat", "Teff", "Maize"],
   not_recommended_crops: ["Barley (rust risk)"],
@@ -90,13 +143,24 @@ function upsertFarmer(body: Record<string, unknown>, byId?: string | null): Mock
   const langRaw = String(body.language ?? "Amharic");
   const language = langRaw.startsWith("Oromo") || langRaw === "Afaan Oromoo" ? "Oromo" : langRaw === "English" ? "English" : "Amharic";
 
+  const regionRaw = String(body.region_state ?? "").trim();
+  if (!isValidEthRegion(regionRaw)) {
+    throw new ApiError(400, "Pick a regional state.", { error: "invalid_region_state" });
+  }
+  const dNum = normDistrictMock(body.district_number ?? body.district);
+  if (dNum == null) {
+    throw new ApiError(400, "Pick District 1–9.", { error: "invalid_district" });
+  }
+
   const row: MockSmsFarmer = {
     id: byId ?? crypto.randomUUID(),
     farmer_code: byId ? String(body.farmer_code ?? "") || nextCode() : nextCode(),
     full_name,
     phone_number: phoneE164,
     language,
-    kebele: String(body.kebele ?? "Bako").trim() || "Bako",
+    region_state: regionRaw,
+    district_number: dNum,
+    kebele: `${regionRaw}-d${dNum}`,
     crops,
     is_active: body.is_active != null ? Boolean(body.is_active) : true,
     registered_by: null,
@@ -124,23 +188,61 @@ function upsertFarmer(body: Record<string, unknown>, byId?: string | null): Mock
 
 function seedIfEmpty() {
   if (farmers.length) return;
+  const R = DEMO_KEBELE_SCOPE.region;
+  const D = DEMO_KEBELE_SCOPE.district;
   [
-    ["Bekele T.", "+251912345678", "Amharic", "Bako", ["Wheat", "Teff"]],
-    ["Tigist A.", "+251923456789", "Oromo", "Guto Gida", ["Teff"]],
-    ["Mulugeta K.", "+251934567890", "Amharic", "Bako", ["Wheat", "Maize"]],
-    ["Hana W.", "+251945678901", "Oromo", "Guto Gida", ["Teff", "Maize"]],
-    ["Alemitu F.", "+251956789012", "Amharic", "Bako", ["Wheat"]],
-  ].forEach(([full_name, phone, language, kebele, crops], idx) => {
-    upsertFarmer({
-      full_name,
-      phone_number: String(phone).replace("+251", "0"),
-      language,
-      kebele,
-      crops,
-      consent_given: true,
-    });
+    ["Bekele T.", "+251912345678", "Amharic", ["Wheat", "Teff"]],
+    ["Tigist A.", "+251923456789", "Oromo", ["Teff"]],
+    ["Mulugeta K.", "+251934567890", "Amharic", ["Wheat", "Maize"]],
+    ["Hana W.", "+251945678901", "Oromo", ["Teff", "Maize"]],
+    ["Alemitu F.", "+251956789012", "Amharic", ["Wheat"]],
+  ].forEach(([full_name, phone, language, crops], idx) => {
+    upsertFarmer(
+      {
+        full_name,
+        phone_number: String(phone).replace("+251", "0"),
+        language,
+        region_state: R,
+        district_number: D,
+        crops,
+        consent_given: true,
+      },
+      undefined,
+    );
     if (idx === 2) farmers[farmers.length - 1].is_active = false;
   });
+  try {
+    upsertFarmer(
+      {
+        full_name: "Out Of Scope Demo",
+        phone_number: "0977777777",
+        language: "Amharic",
+        region_state: "oromia",
+        district_number: 1,
+        crops: [],
+        consent_given: true,
+      },
+      undefined,
+    );
+  } catch {
+    /* dup reload */
+  }
+  try {
+    upsertFarmer(
+      {
+        full_name: "Wrong District Demo",
+        phone_number: "0966666666",
+        language: "Amharic",
+        region_state: R,
+        district_number: 7,
+        crops: ["Teff"],
+        consent_given: true,
+      },
+      undefined,
+    );
+  } catch {
+    /* dup reload */
+  }
 }
 
 function requireKebele(session: AuthUser | null): AuthUser {
@@ -150,42 +252,114 @@ function requireKebele(session: AuthUser | null): AuthUser {
   return session;
 }
 
-function filterTargets(filters: Record<string, unknown>): MockSmsFarmer[] {
+function filterTargets(filters: Record<string, unknown>, workerScope: { region: string; district: number } | null) {
   seedIfEmpty();
   let rows = farmers.filter((f) => f.is_active && f.consent_given);
+  if (workerScope) {
+    rows = rows.filter((f) => f.region_state === workerScope.region && Number(f.district_number) === workerScope.district);
+  }
   if (filters.all_farmers) return rows;
-  const kebes = filters.kebeles as string[] | undefined;
-  if (kebes?.length) rows = rows.filter((f) => kebes.includes(f.kebele));
   const crops = filters.crops as string[] | undefined;
-  if (crops?.length) rows = rows.filter((f) => f.crops.some((c) => crops.includes(c)));
-  if (!kebes?.length && !crops?.length) return [];
-  return rows;
+  if (crops?.length) return rows.filter((f) => f.crops.some((c) => crops.includes(c)));
+  return [];
 }
 
+function d(v: unknown): string {
+  const t = String(v ?? "").trim();
+  return t || "—";
+}
+
+function pickLangFromAd(
+  ad: Advisory,
+  bundleKey: "fertilizer_by_lang" | "forecast_by_lang",
+  legacyKey: string,
+  uiLang: string,
+): string {
+  const prefs =
+    uiLang === "Oromo"
+      ? ["Oromo", "English", "Amharic"]
+      : uiLang === "English"
+        ? ["English", "Amharic", "Oromo"]
+        : ["Amharic", "English", "Oromo"];
+  const bundle = ad[bundleKey];
+  if (bundle && typeof bundle === "object") {
+    for (const p of prefs) {
+      const v = (bundle as Record<string, unknown>)[p];
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+  }
+  return String(ad[legacyKey] ?? "").trim();
+}
+
+/** Mirrors `backend/src/agriSms/messageBuilder.js` for mock previews */
 function buildMsg(ad: Advisory, kebele: string, lang: string, include: Record<string, boolean>) {
+  const cropRec = Array.isArray(ad.recommended_crops) ? (ad.recommended_crops as string[]).join(", ") : "";
+  const cropAvoid = Array.isArray(ad.not_recommended_crops) ? (ad.not_recommended_crops as string[]).join(", ") : "";
   const parts: string[] = [];
-  if (lang === "Oromo") parts.push(`Gorsa Qonnaa - Ganda ${kebele}`);
-  else if (lang === "English") parts.push(`Agri advisory - ${kebele} kebele`);
-  else parts.push(`የግብርና ምክር - ${kebele} ቀበሌ`);
+  if (lang === "Oromo") parts.push(`Gorsa Qonnaa — Ganda ${kebele}`);
+  else if (lang === "English") parts.push(`Agri advisory — ${kebele} kebele`);
+  else parts.push(`የግብርና ምክር — ${kebele} ቀበሌ`);
+
+  const season = d(ad.season);
+  if (season !== "—") {
+    if (lang === "Oromo") parts.push(`Yeroo\n· ${season}`);
+    else if (lang === "English") parts.push(`Season\n· ${season}`);
+    else parts.push(`ወቅት\n· ${season}`);
+  }
+
+  const fertLine = d(pickLangFromAd(ad, "fertilizer_by_lang", "fertilizer_recommendation", lang));
+  const foreLine = d(pickLangFromAd(ad, "forecast_by_lang", "forecast_summary", lang));
+
   if (include.soil) {
-    parts.push(`${lang === "English" ? "Soil:" : lang === "Oromo" ? "Biyyee:" : "አፈር፡"} ${ad.soil_condition} — ${ad.fertilizer_recommendation}`);
+    if (lang === "Oromo") {
+      parts.push(`Biyyee fi xaa'oo\n· Haala: ${d(ad.soil_condition)}\n· pH: ${d(ad.soil_ph)}\n· Xurii/fertilizer: ${fertLine}`);
+    } else if (lang === "English") {
+      parts.push(`Soil & fertilizer\n· Condition: ${d(ad.soil_condition)}\n· pH: ${d(ad.soil_ph)}\n· Fertilizer: ${fertLine}`);
+    } else {
+      parts.push(`አፈር እና ማዕድን\n· ሁኔታ፡ ${d(ad.soil_condition)}\n· pH፡ ${d(ad.soil_ph)}\n· ማስፋፋያ / ፔርቲላይዜሽን፡ ${fertLine}`);
+    }
   }
   if (include.weather) {
-    parts.push(
-      `${lang === "English" ? "Rain:" : lang === "Oromo" ? "Bokkaan:" : "ዝናብ፡"} ${ad.rain_start} – ${ad.rain_end}. ${ad.forecast_summary}`,
-    );
+    const rs = d(ad.rain_start);
+    const re = d(ad.rain_end);
+    const range = rs !== "—" && re !== "—" ? (lang === "Oromo" ? `${rs} irraa ${re}tti` : lang === "English" ? `${rs} → ${re}` : `ከ ${rs} እስከ ${re}`) : "—";
+    let w =
+      lang === "Oromo"
+        ? `Roobaa fi qilleensaa\n· Yeroo: ${range}\n· ${foreLine}`
+        : lang === "English"
+          ? `Rain & weather\n· Window: ${range}\n· ${foreLine}`
+          : `ዝናብ እና አየር\n· ጊዜ፡ ${range}\n· ${foreLine}`;
+    const alert = String(ad.weather_alert ?? "None");
+    if (alert && alert !== "None") {
+      w += lang === "Oromo" ? `\n· Akeekkachiisa: ${alert}` : lang === "English" ? `\n· Alert: ${alert}` : `\n· ማስጠንቀቂያ፡ ${alert}`;
+    }
+    parts.push(w);
   }
   if (include.crops) {
     parts.push(
-      `${(ad.recommended_crops as string[]).join(", ")} • ${lang === "English" ? "Avoid:" : "—"} ${(ad.not_recommended_crops as string[]).join(", ")}. ${ad.planting_advice}`,
+      lang === "Oromo"
+        ? `Midhaan\n· Facuuf: ${cropRec || "—"}\n· Hin facin: ${cropAvoid || "—"}\n· Gorsa: ${d(ad.planting_advice)}`
+        : lang === "English"
+          ? `Crops\n· Plant: ${cropRec || "—"}\n· Avoid: ${cropAvoid || "—"}\n· Advice: ${d(ad.planting_advice)}`
+          : `መከር\n· ይትከሉ፡ ${cropRec || "—"}\n· አይትከሉ፡ ${cropAvoid || "—"}\n· ምክር፡ ${d(ad.planting_advice)}`,
     );
   }
   if (include.prices) {
     parts.push(
-      `ETB/Q: Wheat ${ad.wheat_price_etb}, Teff ${ad.teff_price_etb}, Maize ${ad.maize_price_etb}. ${ad.market_trend}`,
+      lang === "Oromo"
+        ? `Gatii (Birr / q)\n· Qamadii ${ad.wheat_price_etb ?? "—"}\n· Taffii ${ad.teff_price_etb ?? "—"}\n· Micira ${ad.maize_price_etb ?? "—"}\n· Garbuu ${ad.barley_price_etb ?? "—"}\n· Haala gatii: ${d(ad.market_trend)}`
+        : lang === "English"
+          ? `Prices (ETB / q)\n· Wheat ${ad.wheat_price_etb ?? "—"}\n· Teff ${ad.teff_price_etb ?? "—"}\n· Maize ${ad.maize_price_etb ?? "—"}\n· Barley ${ad.barley_price_etb ?? "—"}\n· Trend: ${d(ad.market_trend)}`
+          : `ዋጋ (ብር / ኩንታል)\n· ስንዴ ${ad.wheat_price_etb ?? "—"}\n· ጤፍ ${ad.teff_price_etb ?? "—"}\n· ማሽ ${ad.maize_price_etb ?? "—"}\n· ገብስ ${ad.barley_price_etb ?? "—"}\n· አካባቢ ዋጋ፡ ${d(ad.market_trend)}`,
     );
   }
-  parts.push(lang === "English" ? "Contact kebele office." : lang === "Oromo" ? "Bilisummaa keessatti gaafadhu." : "ወደ ቀበሌ ቢሮ ይጠይቁ።");
+  parts.push(
+    lang === "English"
+      ? "Contact your kebele office for more information."
+      : lang === "Oromo"
+        ? "Odeeffannoo dabalataa bilisummaa kee irraa gaafadhu."
+        : "የበለጠ መረጃ ወደ ቀበሌ ቢሮ ይጠይቁ።",
+  );
   return parts.join("\n\n");
 }
 
@@ -208,7 +382,7 @@ export function tryHandleAgriSms<T>(
   const json = parseJson(rawBody);
 
   if (method === "POST" && pathname === "/api/v1/agri-sms/farmers/register") {
-    const row = upsertFarmer({ ...json, consent_given: true });
+    const row = upsertFarmer({ ...json, consent_given: true }, undefined);
     return {
       ok: true,
       farmer: {
@@ -218,6 +392,8 @@ export function tryHandleAgriSms<T>(
         phone_number: row.phone_number,
         language: row.language,
         kebele: row.kebele,
+        region_state: row.region_state,
+        district_number: row.district_number,
         crops: row.crops,
         registered_at: row.registered_at,
       },
@@ -230,7 +406,8 @@ export function tryHandleAgriSms<T>(
   if (method === "GET" && pathname === "/api/v1/agri-sms/farmers") {
     const params = new URLSearchParams(search);
     const q = (params.get("search") ?? "").trim().toLowerCase();
-    let rows = [...farmers];
+    const sc = clerkSmsScope(session)!;
+    let rows = farmers.filter((f) => f.region_state === sc.region && Number(f.district_number) === sc.district);
     if (q) {
       rows = rows.filter(
         (f) =>
@@ -239,13 +416,20 @@ export function tryHandleAgriSms<T>(
           f.farmer_code.toLowerCase().includes(q),
       );
     }
-    const kb = params.get("kebele");
-    if (kb && kb !== "all") rows = rows.filter((f) => f.kebele === kb);
     return { ok: true, farmers: rows, total: rows.length } as T;
   }
 
   if (method === "POST" && pathname === "/api/v1/agri-sms/farmers") {
-    const row = upsertFarmer({ ...json, consent_given: true });
+    const sc = clerkSmsScope(session)!;
+    const row = upsertFarmer(
+      {
+        ...json,
+        region_state: json.region_state ?? sc.region,
+        district_number: json.district_number ?? sc.district,
+        consent_given: true,
+      },
+      undefined,
+    );
     return { ok: true, farmer: row } as T;
   }
 
@@ -269,8 +453,72 @@ export function tryHandleAgriSms<T>(
   }
 
   if (method === "POST" && pathname === "/api/v1/agri-sms/advisories") {
-    advisory = { ...advisory, ...json, updated_at: new Date().toISOString() };
+    const cur = advisory;
+    const input = json;
+    advisory = {
+      ...cur,
+      ...input,
+      fertilizer_by_lang:
+        input.fertilizer_by_lang != null && typeof input.fertilizer_by_lang === "object"
+          ? { ...(cur.fertilizer_by_lang as object), ...(input.fertilizer_by_lang as object) }
+          : cur.fertilizer_by_lang,
+      forecast_by_lang:
+        input.forecast_by_lang != null && typeof input.forecast_by_lang === "object"
+          ? { ...(cur.forecast_by_lang as object), ...(input.forecast_by_lang as object) }
+          : cur.forecast_by_lang,
+      updated_at: new Date().toISOString(),
+    };
     return { ok: true, advisory } as T;
+  }
+
+  if (method === "POST" && pathname === "/api/v1/agri-sms/advisories/ai-draft") {
+    seedIfEmpty();
+    const sc = clerkSmsScope(session)!;
+    const rows = farmers.filter(
+      (f) =>
+        f.region_state === sc.region &&
+        Number(f.district_number) === sc.district &&
+        f.is_active &&
+        f.consent_given,
+    );
+    const kb = smsAreaEnglish(sc.region, sc.district);
+    const cropCounts: Record<string, number> = {};
+    for (const r of rows) {
+      for (const c of r.crops) {
+        cropCounts[c] = (cropCounts[c] ?? 0) + 1;
+      }
+    }
+    const y = new Date().getFullYear();
+    const cropsLine = Object.keys(cropCounts).join(", ") || "typical cereals";
+    const fertEn = `NPS at planting; top-dress urea at tillering per extension. Fits ${kb} (${cropsLine}).`;
+    const foreEn = `Rain may follow usual Kiremt timing; totals often near normal; short dry spells still possible.`;
+    const draft = {
+      season: `Meher ${y}`,
+      fertilizer_recommendation: fertEn,
+      fertilizer_by_lang: {
+        Amharic: `በመትከያ ኤንፒኤስ ይጠቀሙ፤ በአማራጭ ደረጃ ዩሪያ እንደ ምክር። ${kb} (${cropsLine})።`,
+        Oromo: `NPS yeroo facaa; urea yeroo dafinsa akka gorsa. ${kb} (${cropsLine}).`,
+        English: fertEn,
+      },
+      forecast_summary: foreEn,
+      forecast_by_lang: {
+        Amharic: `ዝናብ የተለመደውን ኪረምት ሊያምን ይችላል፤ አጠገናው ተለዋዋጭ ሊሆን ይችላል።`,
+        Oromo: `Roobni yeroo kireemtii akka barbaachisummaa ol'aanaatti dhufuu danda'a; gagaa gagaa akka jiru.`,
+        English: foreEn,
+      },
+      rain_start: `${y}-06-15`,
+      rain_end: `${y}-09-30`,
+      weather_alert: "None" as const,
+    };
+    const context_used = {
+      region_state: sc.region,
+      district_number: sc.district,
+      area_summary: kb,
+      active_farmer_count: rows.length,
+      crop_counts: cropCounts,
+      signup_locations_sample: [],
+    };
+    return { ok: true, provider: "mock", context_used, draft } as T;
   }
 
   if (method === "POST" && pathname === "/api/v1/agri-sms/broadcasts/preview") {
@@ -280,7 +528,8 @@ export function tryHandleAgriSms<T>(
       crops: Boolean((json.include as Record<string, boolean> | undefined)?.crops ?? true),
       prices: Boolean((json.include as Record<string, boolean> | undefined)?.prices ?? true),
     };
-    const k = String(json.kebele ?? "Bako");
+    const sc = clerkSmsScope(session)!;
+    const k = smsAreaEnglish(sc.region, sc.district);
     const ad = json.advisory ? { ...advisory, ...json.advisory } : advisory;
     const am = buildMsg(ad, k, "Amharic", incl);
     const om = buildMsg(ad, k, "Oromo", incl);
@@ -294,14 +543,15 @@ export function tryHandleAgriSms<T>(
 
   if (method === "POST" && pathname === "/api/v1/agri-sms/broadcasts") {
     const filters = (json.target_filters as Record<string, unknown>) ?? { all_farmers: true };
-    const targets = filterTargets(filters);
+    const targets = filterTargets(filters, clerkSmsScope(session));
     const incl = {
       soil: Boolean((json.include as Record<string, boolean> | undefined)?.soil ?? true),
       weather: Boolean((json.include as Record<string, boolean> | undefined)?.weather ?? true),
       crops: Boolean((json.include as Record<string, boolean> | undefined)?.crops ?? true),
       prices: Boolean((json.include as Record<string, boolean> | undefined)?.prices ?? true),
     };
-    const k = String((filters.kebeles as string[] | undefined)?.[0] ?? "Bako");
+    const sc = clerkSmsScope(session)!;
+    const k = smsAreaEnglish(sc.region, sc.district);
     const message_amharic = buildMsg(advisory, k, "Amharic", incl);
     const message_oromo = buildMsg(advisory, k, "Oromo", incl);
     const message_english = buildMsg(advisory, k, "English", incl);
