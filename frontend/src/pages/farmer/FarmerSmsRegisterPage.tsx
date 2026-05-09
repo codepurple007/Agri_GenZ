@@ -19,10 +19,10 @@ import { Link } from "react-router-dom";
 import { publicApiFetch, ApiError } from "@/api/client";
 import {
   DISTRICT_NUMBERS,
-  ETHIOPIA_REGION_IDS,
-  type EthiopiaRegionId,
+  KEBELE_UNIT_IDS,
+  type SmsKebeleUnitId,
   formatDistrictLabel,
-  regionLabel,
+  kebeleUnitLabel,
 } from "@/agriSms/constants";
 import { AgriServiceLogo } from "@/components/brand/AgriServiceLogo";
 import type { Locale } from "@/i18n/landing";
@@ -62,8 +62,8 @@ export function FarmerSmsRegisterPage() {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [langUi, setLangUi] = useState("Amharic");
-  const [regionId, setRegionId] = useState<EthiopiaRegionId>("amhara");
-  const [districtNum, setDistrictNum] = useState(3);
+  const [kebeleUnitId, setKebeleUnitId] = useState<SmsKebeleUnitId>("kebele_1");
+  const [districtNum, setDistrictNum] = useState(1);
   const [crops, setCrops] = useState<string[]>([]);
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -127,7 +127,7 @@ export function FarmerSmsRegisterPage() {
           full_name: fullName.trim(),
           phone_number: phone.trim(),
           language: mapLanguageToApi(langUi),
-          region_state: regionId,
+          region_state: kebeleUnitId,
           district_number: districtNum,
           consent_given: true,
           crops,
@@ -247,21 +247,21 @@ export function FarmerSmsRegisterPage() {
                     </Select>
                   </FormControl>
                   <FormControl isRequired>
-                    <FormLabel>{t.regionState}</FormLabel>
+                    <FormLabel>{t.kebele}</FormLabel>
                     <Select
                       size="lg"
-                      value={regionId}
-                      onChange={(e) => setRegionId(e.target.value as EthiopiaRegionId)}
+                      value={kebeleUnitId}
+                      onChange={(e) => setKebeleUnitId(e.target.value as SmsKebeleUnitId)}
                       sx={touchFieldSx}
                     >
-                      {ETHIOPIA_REGION_IDS.map((id) => (
+                      {KEBELE_UNIT_IDS.map((id) => (
                         <option key={id} value={id}>
-                          {regionLabel(id, locale)}
+                          {kebeleUnitLabel(id, locale)}
                         </option>
                       ))}
                     </Select>
                     <FormHelperText fontSize="sm" color="gray.600" mt={1.5}>
-                      {t.regionHint}
+                      {t.kebeleHint}
                     </FormHelperText>
                   </FormControl>
                   <FormControl isRequired>
@@ -278,6 +278,9 @@ export function FarmerSmsRegisterPage() {
                         </option>
                       ))}
                     </Select>
+                    <FormHelperText fontSize="sm" color="gray.600" mt={1.5}>
+                      {t.districtHint}
+                    </FormHelperText>
                   </FormControl>
                   <FormControl>
                     <FormLabel>{t.cropsLabel}</FormLabel>

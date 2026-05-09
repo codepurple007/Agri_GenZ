@@ -18,6 +18,7 @@ import { useNavigate } from "react-router-dom";
 import { apiFetch } from "@/api/client";
 import { ApiError } from "@/api/errors";
 import { useAuth } from "@/hooks/useAuth";
+import { getStoredLocale, type Locale } from "@/i18n/landing";
 import { formatJurisdictionLine, resolveSmsWorkerJurisdiction } from "@/pages/kebele/kebeleScope";
 
 type SmsFarmerRow = {
@@ -35,10 +36,16 @@ type PreviewRes = {
   segments: Record<string, number>;
 };
 
+function deskLocale(): Locale {
+  const s = getStoredLocale();
+  return s === "en" || s === "am" || s === "om" ? s : "en";
+}
+
 export function KebeleBroadcastPage() {
   const toast = useToast();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const uiLocale = deskLocale();
   const { regionId: scopedRegionId, districtNum: scopedDistrictNum } = resolveSmsWorkerJurisdiction(user);
 
   const [farmers, setFarmers] = useState<SmsFarmerRow[]>([]);
@@ -58,8 +65,12 @@ export function KebeleBroadcastPage() {
 
   const jurisdictionLine =
     scopedRegionId != null && scopedDistrictNum != null
-      ? formatJurisdictionLine(scopedRegionId, scopedDistrictNum, "en")
-      : "Your district";
+      ? formatJurisdictionLine(scopedRegionId, scopedDistrictNum, uiLocale)
+      : uiLocale === "am"
+        ? "የእርስዎ ወረዳ"
+        : uiLocale === "om"
+          ? "Diristirikii keessan"
+          : "Your district";
 
   const eligible = useMemo(
     () => farmers.filter((f) => f.is_active && f.consent_given),

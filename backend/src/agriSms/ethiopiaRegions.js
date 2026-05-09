@@ -1,56 +1,34 @@
-/** Canonical region ids (ASCII) for API / storage — matches frontend `agriSms/constants`. */
-export const ETHIOPIA_REGION_IDS = [
-  "addis_ababa",
-  "afar",
-  "amhara",
-  "benishangul_gumuz",
-  "central_ethiopia",
-  "dire_dawa",
-  "gambella",
-  "harari",
-  "oromia",
-  "sidama",
-  "somali",
-  "snnpr",
-  "south_west_ethiopia_peoples",
-  "tigray",
-];
+/** Canonical IDs stored in `region_state` — kebele units 1–3 (matches frontend `KEBELE_UNIT_IDS`). */
+export const KEBELE_UNIT_IDS = ["kebele_1", "kebele_2", "kebele_3"];
 
-const REGION_SET = new Set(ETHIOPIA_REGION_IDS);
+const KEBELE_SET = new Set(KEBELE_UNIT_IDS);
 
 export function isValidRegionId(id) {
-  return typeof id === "string" && REGION_SET.has(id);
+  return typeof id === "string" && KEBELE_SET.has(id);
 }
 
-/** @param {unknown} n */
+/** @param {unknown} n District within kebele (1–5) */
 export function normalizeDistrictNumber(n) {
   const x = Number(n);
-  if (!Number.isInteger(x) || x < 1 || x > 9) return null;
+  if (!Number.isInteger(x) || x < 1 || x > 5) return null;
   return x;
 }
 
-/** Readable English area line for SMS headers (region + district). */
-export function fallbackLocationEnglish(regionId, districtNum) {
-  const titles = {
-    addis_ababa: "Addis Ababa",
-    afar: "Afar",
-    amhara: "Amhara",
-    benishangul_gumuz: "Benishangul-Gumuz",
-    central_ethiopia: "Central Ethiopia",
-    dire_dawa: "Dire Dawa",
-    gambella: "Gambella",
-    harari: "Harari",
-    oromia: "Oromia",
-    sidama: "Sidama",
-    somali: "Somali",
-    snnpr: "SNNPR",
-    south_west_ethiopia_peoples: "South West Ethiopia Peoples",
-    tigray: "Tigray",
-  };
-  const t = titles[regionId] ?? String(regionId);
+const EN_TITLES = {
+  kebele_1: "Kebele 1",
+  kebele_2: "Kebele 2",
+  kebele_3: "Kebele 3",
+};
+
+/** English line for SMS headers / Gemini (API supports three UI languages separately). */
+export function fallbackLocationEnglish(kebeleUnitId, districtNum) {
+  const t = EN_TITLES[kebeleUnitId] ?? String(kebeleUnitId);
   return `${t} · District ${districtNum}`;
 }
 
-export function smsHeaderAreaEnglish(regionId, districtNum) {
-  return fallbackLocationEnglish(regionId, districtNum);
+export function smsHeaderAreaEnglish(kebeleUnitId, districtNum) {
+  return fallbackLocationEnglish(kebeleUnitId, districtNum);
 }
+
+/** @deprecated Prefer KEBELE_UNIT_IDS — kept if old imports referenced regions */
+export const ETHIOPIA_REGION_IDS = KEBELE_UNIT_IDS;

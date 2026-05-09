@@ -89,7 +89,7 @@ const STAFF_DEMOS: Record<
       phone: "+251900000006",
       fullName: "Almaz D. (Kebele worker)",
       role: "kebele_worker",
-      smsRegion: "amhara",
+      smsRegion: "kebele_3",
       smsDistrict: 3,
     },
   },

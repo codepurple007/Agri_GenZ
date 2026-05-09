@@ -25,7 +25,7 @@ function clerkSmsScope(auth) {
   let r = auth.sms_region;
   let d = auth.sms_district;
   if (r == null || r === "" || d == null || d === "") {
-    r = "amhara";
+    r = "kebele_3";
     d = 3;
   }
   return { region: String(r), district: Number(d) };
@@ -45,12 +45,12 @@ function mapSmsErr(res, err) {
     case "INVALID_REGION_STATE":
       return res.status(400).json({
         error: "invalid_region_state",
-        message: "Pick a regional state from the list.",
+        message: "Pick a kebele from the list (Kebele 1–3).",
       });
     case "INVALID_DISTRICT":
       return res.status(400).json({
         error: "invalid_district",
-        message: "Pick District 1–9.",
+        message: "Pick District 1–5.",
       });
     default:
       console.error(err);
@@ -142,7 +142,7 @@ agriSmsWorkerRouter.post("/advisories", (req, res) => {
 agriSmsWorkerRouter.post("/advisories/ai-draft", async (req, res) => {
   const scope = clerkSmsScope(req.auth);
   const ctx =
-    scope != null ? buildGeminiContextForScope(scope.region, scope.district) : buildGeminiContextForScope("amhara", 3);
+    scope != null ? buildGeminiContextForScope(scope.region, scope.district) : buildGeminiContextForScope("kebele_3", 3);
   if (!process.env.GEMINI_API_KEY?.trim()) {
     return res.status(503).json({
       ok: false,

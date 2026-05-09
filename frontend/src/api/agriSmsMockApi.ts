@@ -5,25 +5,14 @@ import { DEMO_KEBELE_SCOPE, ETHIOPIA_REGION_IDS } from "@/agriSms/constants";
 import type { AuthUser } from "@/auth/types";
 import { ApiError } from "@/api/errors";
 
-const REGION_EN_TITLE: Record<string, string> = {
-  addis_ababa: "Addis Ababa",
-  afar: "Afar",
-  amhara: "Amhara",
-  benishangul_gumuz: "Benishangul-Gumuz",
-  central_ethiopia: "Central Ethiopia",
-  dire_dawa: "Dire Dawa",
-  gambella: "Gambella",
-  harari: "Harari",
-  oromia: "Oromia",
-  sidama: "Sidama",
-  somali: "Somali",
-  snnpr: "SNNPR",
-  south_west_ethiopia_peoples: "South West Ethiopia Peoples",
-  tigray: "Tigray",
+const KEBELE_EN_TITLE: Record<string, string> = {
+  kebele_1: "Kebele 1",
+  kebele_2: "Kebele 2",
+  kebele_3: "Kebele 3",
 };
 
-function smsAreaEnglish(regionId: string, districtNum: number): string {
-  const t = REGION_EN_TITLE[regionId] ?? regionId;
+function smsAreaEnglish(kebeleUnitId: string, districtNum: number): string {
+  const t = KEBELE_EN_TITLE[kebeleUnitId] ?? kebeleUnitId;
   return `${t} · District ${districtNum}`;
 }
 
@@ -33,7 +22,7 @@ function isValidEthRegion(id: string): boolean {
 
 function normDistrictMock(n: unknown): number | null {
   const x = Number(n);
-  if (!Number.isInteger(x) || x < 1 || x > 9) return null;
+  if (!Number.isInteger(x) || x < 1 || x > 5) return null;
   return x;
 }
 
@@ -145,11 +134,11 @@ function upsertFarmer(body: Record<string, unknown>, byId?: string | null): Mock
 
   const regionRaw = String(body.region_state ?? "").trim();
   if (!isValidEthRegion(regionRaw)) {
-    throw new ApiError(400, "Pick a regional state.", { error: "invalid_region_state" });
+    throw new ApiError(400, "Pick a kebele (1–3) from the list.", { error: "invalid_region_state" });
   }
   const dNum = normDistrictMock(body.district_number ?? body.district);
   if (dNum == null) {
-    throw new ApiError(400, "Pick District 1–9.", { error: "invalid_district" });
+    throw new ApiError(400, "Pick District 1–5.", { error: "invalid_district" });
   }
 
   const row: MockSmsFarmer = {
@@ -217,7 +206,7 @@ function seedIfEmpty() {
         full_name: "Out Of Scope Demo",
         phone_number: "0977777777",
         language: "Amharic",
-        region_state: "oromia",
+        region_state: "kebele_1",
         district_number: 1,
         crops: [],
         consent_given: true,
@@ -234,7 +223,7 @@ function seedIfEmpty() {
         phone_number: "0966666666",
         language: "Amharic",
         region_state: R,
-        district_number: 7,
+        district_number: 5,
         crops: ["Teff"],
         consent_given: true,
       },

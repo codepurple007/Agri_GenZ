@@ -28,10 +28,16 @@ import {
   useToast,
 } from "@chakra-ui/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { type EthiopiaRegionId, formatDistrictLabel, regionLabel } from "@/agriSms/constants";
+import {
+  KEBELE_UNIT_IDS,
+  formatDistrictLabel,
+  kebeleUnitLabel,
+  type SmsKebeleUnitId,
+} from "@/agriSms/constants";
 import { apiFetch } from "@/api/client";
 import { ApiError } from "@/api/errors";
 import { useAuth } from "@/hooks/useAuth";
+import { getStoredLocale, type Locale } from "@/i18n/landing";
 import {
   farmerJurisdictionLine,
   formatJurisdictionLine,
@@ -67,9 +73,15 @@ function selectToApiLang(v: string): string {
   return v;
 }
 
+function resolveUiLocale(): Locale {
+  const s = getStoredLocale();
+  return s === "am" || s === "om" || s === "en" ? s : "en";
+}
+
 export function KebeleFarmersPage() {
   const toast = useToast();
   const { user } = useAuth();
+  const uiLocale = resolveUiLocale();
   const { regionId: scopedRegionId, districtNum: scopedDistrictNum } = resolveSmsWorkerJurisdiction(user);
 
   const [rows, setRows] = useState<SmsFarmerRow[]>([]);
@@ -178,7 +190,7 @@ export function KebeleFarmersPage() {
 
   const tableRows = useMemo(() => rows, [rows]);
 
-  const jurisdictionLine = formatJurisdictionLine(scopedRegionId, scopedDistrictNum, "en");
+  const jurisdictionLine = formatJurisdictionLine(scopedRegionId, scopedDistrictNum, uiLocale);
 
   return (
     <Stack spacing={6}>
@@ -216,8 +228,8 @@ export function KebeleFarmersPage() {
               <Th>Name</Th>
               <Th>Phone</Th>
               <Th>Lang</Th>
-              <Th>Region</Th>
-              <Th>District</Th>
+              <Th>{uiLocale === "am" ? "ቀበሌ" : uiLocale === "om" ? "Ganda" : "Kebele"}</Th>
+              <Th>{uiLocale === "am" ? "ወረዳ" : uiLocale === "om" ? "Diristiriktii" : "District"}</Th>
               <Th>Status</Th>
               <Th />
             </Tr>
@@ -232,10 +244,12 @@ export function KebeleFarmersPage() {
                 <Td>{f.phone_number}</Td>
                 <Td>{f.language === "Oromo" ? "Oromoo" : f.language}</Td>
                 <Td fontSize="sm">
-                  {f.region_state ? regionLabel(f.region_state as EthiopiaRegionId, "en") : "—"}
+                  {f.region_state && (KEBELE_UNIT_IDS as readonly string[]).includes(f.region_state)
+                    ? kebeleUnitLabel(f.region_state as SmsKebeleUnitId, uiLocale)
+                    : "—"}
                 </Td>
                 <Td fontSize="sm">
-                  {f.district_number != null ? formatDistrictLabel(f.district_number, "en") : "—"}
+                  {f.district_number != null ? formatDistrictLabel(f.district_number, uiLocale) : "—"}
                 </Td>
                 <Td>
                   <Badge colorScheme={f.is_active ? "green" : "red"}>{f.is_active ? "Active" : "Inactive"}</Badge>
@@ -362,7 +376,7 @@ export function KebeleFarmersPage() {
                     bg="gray.50"
                   >
                     <Text fontSize="sm" fontWeight="500" color="gray.800">
-                      {farmerJurisdictionLine(editing, "en")}
+                      {farmerJurisdictionLine(editing, uiLocale)}
                     </Text>
                   </Box>
                 </FormControl>

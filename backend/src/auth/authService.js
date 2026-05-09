@@ -34,7 +34,7 @@ export function signToken(user) {
   }
   if (user.sms_district != null && user.sms_district !== "") {
     const d = Number(user.sms_district);
-    if (Number.isInteger(d) && d >= 1 && d <= 9) payload.sms_district = d;
+    if (Number.isInteger(d) && d >= 1 && d <= 5) payload.sms_district = d;
   }
   return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES });
 }
@@ -243,7 +243,7 @@ export async function staffLogin({ username, password }) {
       phone_e164: "+251900000006",
       full_name: "Almaz D. (Kebele worker)",
       role: "kebele_worker",
-      sms_region: "amhara",
+      sms_region: "kebele_3",
       sms_district: 3,
     };
   } else {

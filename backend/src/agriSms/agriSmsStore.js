@@ -200,7 +200,7 @@ export function updateFarmer(id, patch, allowDeactivate) {
     /* legacy compound */
     const s = String(patch.kebele).trim();
     if (s) f.kebele = s;
-    const m = s.match(/^([\w]+)-d(\d)$/i);
+    const m = s.match(/^([\w\d_]+)-d(\d+)$/i);
     if (m && isValidRegionId(m[1])) {
       f.region_state = m[1];
       f.district_number = Number(m[2]);
@@ -283,8 +283,8 @@ export function filterTargets(filters, workerScope = null) {
   return [];
 }
 
-/** Demo clerks (`kebele` login) scope: Amhara, district 3 — seed matched + a few outsiders */
-const DEMO_RG = "amhara";
+/** Demo clerks (`kebele` login): Kebele 3, District 3 — seed matched + a few outsiders */
+const DEMO_RG = "kebele_3";
 const DEMO_D = 3;
 
 [
@@ -321,7 +321,7 @@ try {
       full_name: "Out Of Scope Demo",
       phone_number: "0977777777",
       language: "Amharic",
-      region_state: "oromia",
+      region_state: "kebele_1",
       district_number: 1,
       crops: [],
       consent_given: true,
@@ -339,7 +339,7 @@ try {
       phone_number: "0966666666",
       language: "Amharic",
       region_state: DEMO_RG,
-      district_number: 7,
+      district_number: 5,
       crops: ["Teff"],
       consent_given: true,
     },

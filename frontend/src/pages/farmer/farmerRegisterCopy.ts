@@ -6,12 +6,12 @@ export type FarmerRegisterStrings = {
   phone: string;
   phoneHint: string;
   language: string;
-  /** Regional state (Ethiopia) */
-  regionState: string;
-  /** District 1–9 */
+  /** Kebele unit (1–3), shown in UI language */
+  kebele: string;
+  /** District 1–5 */
   district: string;
-  /** Shown under region select on small screens */
-  regionHint: string;
+  kebeleHint: string;
+  districtHint: string;
   cropsLabel: string;
   cropWheat: string;
   cropTeff: string;
@@ -31,9 +31,10 @@ export const farmerRegisterCopy: Record<Locale, FarmerRegisterStrings> = {
     phone: "Phone",
     phoneHint: "09XXXXXXXX",
     language: "Language",
-    regionState: "Regional state",
+    kebele: "Kebele",
     district: "District",
-    regionHint: "Open the list and select your regional state.",
+    kebeleHint: "Open the list and choose Kebele 1, 2, or 3.",
+    districtHint: "Open the list and choose District 1–5.",
     cropsLabel: "Crops (optional)",
     cropWheat: "Wheat",
     cropTeff: "Teff",
@@ -51,9 +52,10 @@ export const farmerRegisterCopy: Record<Locale, FarmerRegisterStrings> = {
     phone: "ስልክ",
     phoneHint: "09XXXXXXXX",
     language: "ቋንቋ",
-    regionState: "ክልል",
+    kebele: "ቀበሌ",
     district: "ወረዳ",
-    regionHint: "ዝርዝሩን ክፈትና ክልልዎን ይምረጡ።",
+    kebeleHint: "ዝርዝሩን ክፈት እና ቀበሌ ፩፣ ፪ ወይም ፫ ይምረጡ።",
+    districtHint: "ዝርዝሩን ክፈት እና ከ ፩–፭ ወረዳ ይምረጡ።",
     cropsLabel: "ሰብል (አማራጭ)",
     cropWheat: "ስንዴ",
     cropTeff: "ጤፍ",
@@ -71,9 +73,10 @@ export const farmerRegisterCopy: Record<Locale, FarmerRegisterStrings> = {
     phone: "Bilbilaa",
     phoneHint: "09XXXXXXXX",
     language: "Afaan",
-    regionState: "Godina (Naannoo)",
+    kebele: "Ganda",
     district: "Diristiriktii",
-    regionHint: "Tarree banadhu naannoo kee filadhu.",
+    kebeleHint: "Tarree banadhu Ganda 1, 2 ykn 3 filadhu.",
+    districtHint: "Tarree banadhu Diristiriktii 1 hanga 5 filadhu.",
     cropsLabel: "Midhaan (filannoo)",
     cropWheat: "Qamadii",
     cropTeff: "Taffii",

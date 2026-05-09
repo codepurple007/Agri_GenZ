@@ -1,100 +1,39 @@
 import type { Locale } from "@/i18n/landing";
 
-/** Canonical region ids — same order as backend `ethiopiaRegions.js` */
-export const ETHIOPIA_REGION_IDS = [
-  "addis_ababa",
-  "afar",
-  "amhara",
-  "benishangul_gumuz",
-  "central_ethiopia",
-  "dire_dawa",
-  "gambella",
-  "harari",
-  "oromia",
-  "sidama",
-  "somali",
-  "snnpr",
-  "south_west_ethiopia_peoples",
-  "tigray",
-] as const;
+/** Stored in API field `region_state` — simplified kebele units (localized labels below). */
+export const KEBELE_UNIT_IDS = ["kebele_1", "kebele_2", "kebele_3"] as const;
 
-export type EthiopiaRegionId = (typeof ETHIOPIA_REGION_IDS)[number];
+export type SmsKebeleUnitId = (typeof KEBELE_UNIT_IDS)[number];
 
-/** Localized labels for registration & worker UIs */
-export const ETHIOPIA_REGION_LABELS: Record<EthiopiaRegionId, Record<Locale, string>> = {
-  addis_ababa: {
-    en: "Addis Ababa",
-    am: "አዲስ አበባ",
-    om: "Finfinnee / Addis Ababa",
+/** @deprecated Prefer `SmsKebeleUnitId` — legacy name kept for gradual refactors */
+export type EthiopiaRegionId = SmsKebeleUnitId;
+
+/** Kept alias for imports expecting `ETHIOPIA_REGION_IDS` */
+export const ETHIOPIA_REGION_IDS = KEBELE_UNIT_IDS;
+
+/** Localized kebele list labels (registration + worker UI) */
+export const KEBELE_UNIT_LABELS: Record<SmsKebeleUnitId, Record<Locale, string>> = {
+  kebele_1: {
+    en: "Kebele 1",
+    am: "ቀበሌ 1",
+    om: "Ganda 1",
   },
-  afar: {
-    en: "Afar",
-    am: "ዓፋር",
-    om: "Afaar",
+  kebele_2: {
+    en: "Kebele 2",
+    am: "ቀበሌ 2",
+    om: "Ganda 2",
   },
-  amhara: {
-    en: "Amhara",
-    am: "አማራ",
-    om: "Amaraa",
-  },
-  benishangul_gumuz: {
-    en: "Benishangul-Gumuz",
-    am: "በኒሻንጉል ጉሙዝ",
-    om: "Benishaangul-Gumuuz",
-  },
-  central_ethiopia: {
-    en: "Central Ethiopia Region",
-    am: "መካከለኛ ኢትዮጵያ ክልል",
-    om: "Naannoo Itoophiyaa Giddugaleessaa",
-  },
-  dire_dawa: {
-    en: "Dire Dawa",
-    am: "ድሬዳዋ",
-    om: "Dirree Dhawaa",
-  },
-  gambella: {
-    en: "Gambella",
-    am: "ጋምቤላ",
-    om: "Gaambeellaa",
-  },
-  harari: {
-    en: "Harari",
-    am: "ሐረሪ",
-    om: "Hararii",
-  },
-  oromia: {
-    en: "Oromia",
-    am: "ኦሮሚያ",
-    om: "Oromiyaa",
-  },
-  sidama: {
-    en: "Sidama",
-    am: "ሲዳማ",
-    om: "Sidaamaa",
-  },
-  somali: {
-    en: "Somali",
-    am: "ሶማሌ",
-    om: "Sumalee",
-  },
-  snnpr: {
-    en: "Southern Nations, Nationalities and Peoples (SNNPR)",
-    am: "ደቡብ ብሔሮች ብሔረሰቦችና ሕዝቦች",
-    om: "Naannoo Biyyoota Kibbaa",
-  },
-  south_west_ethiopia_peoples: {
-    en: "South West Ethiopia Peoples’ Region",
-    am: "ደቡብ ምዕራብ ኢትዮጵያ ሕዝቦች ክልል",
-    om: "Naannoo Biyyoota Kibba Lixaa Itoophiyaa",
-  },
-  tigray: {
-    en: "Tigray",
-    am: "ትግራይ",
-    om: "Tigraay",
+  kebele_3: {
+    en: "Kebele 3",
+    am: "ቀበሌ 3",
+    om: "Ganda 3",
   },
 };
 
-export const DISTRICT_NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
+/** Legacy — use `KEBELE_UNIT_LABELS` */
+export const ETHIOPIA_REGION_LABELS = KEBELE_UNIT_LABELS;
+
+export const DISTRICT_NUMBERS = [1, 2, 3, 4, 5] as const;
 
 export function formatDistrictLabel(n: number, locale: Locale): string {
   if (locale === "am") return `ወረዳ ${n}`;
@@ -102,14 +41,19 @@ export function formatDistrictLabel(n: number, locale: Locale): string {
   return `District ${n}`;
 }
 
-export function regionLabel(id: EthiopiaRegionId, locale: Locale): string {
-  return ETHIOPIA_REGION_LABELS[id][locale];
+export function kebeleUnitLabel(id: SmsKebeleUnitId, locale: Locale): string {
+  return KEBELE_UNIT_LABELS[id][locale];
+}
+
+/** @deprecated Use `kebeleUnitLabel` — same behaviour */
+export function regionLabel(id: SmsKebeleUnitId, locale: Locale): string {
+  return kebeleUnitLabel(id, locale);
 }
 
 /**
- * Demo scope previously used literal village names; workers now use region + district only.
+ * Demo worker scope (`kebele` / SMS login).
  */
 export const DEMO_KEBELE_SCOPE = {
-  region: "amhara" as EthiopiaRegionId,
+  region: "kebele_3" as SmsKebeleUnitId,
   district: 3,
 };
