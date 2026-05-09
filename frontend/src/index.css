@@ -35,7 +35,8 @@ body {
 }
 
 /* Amharic uses Noto Sans Ethiopic */
-.lang-am {
+.lang-am,
+.lang-om {
   font-family: "Noto Sans Ethiopic", "DM Sans", system-ui, sans-serif;
 }
 

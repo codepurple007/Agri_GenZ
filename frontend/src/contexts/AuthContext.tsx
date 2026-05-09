@@ -1,25 +1,21 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
-import { apiFetch, getStoredToken, setStoredToken } from "@/api/client";
+import {
+  apiFetch,
+  clearStoredSession,
+  getStoredToken,
+  getStoredUserProfile,
+  setStoredToken,
+  setStoredUserProfile,
+} from "@/api/client";
+import { MOCK_TOKEN, USE_MOCK_API } from "@/api/mockApi";
 import type { AuthUser } from "@/auth/types";
-
-type AuthContextValue = {
-  user: AuthUser | null;
-  token: string | null;
-  ready: boolean;
-  setSession: (token: string, user: AuthUser) => void;
-  logout: () => void;
-  refreshMe: () => Promise<void>;
-};
-
-const AuthContext = createContext<AuthContextValue | null>(null);
+import { AuthContext } from "./auth-context";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -27,14 +23,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
 
   const logout = useCallback(() => {
-    setStoredToken(null);
+    clearStoredSession();
     setToken(null);
     setUser(null);
   }, []);
 
-  const setSession = useCallback((t: string, u: AuthUser) => {
-    setStoredToken(t);
-    setToken(t);
+  const setSession = useCallback((accessToken: string, u: AuthUser) => {
+    setStoredToken(accessToken);
+    setStoredUserProfile(u);
+    setToken(accessToken);
     setUser(u);
   }, []);
 
@@ -45,12 +42,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(null);
       return;
     }
+
+    if (USE_MOCK_API && t === MOCK_TOKEN) {
+      const profile = getStoredUserProfile();
+      if (profile) {
+        setUser(profile);
+        setToken(t);
+        return;
+      }
+      clearStoredSession();
+      setUser(null);
+      setToken(null);
+      return;
+    }
+
     try {
       const data = await apiFetch<{ user: AuthUser }>("/api/v1/auth/me");
       setUser(data.user);
+      setStoredUserProfile(data.user);
       setToken(t);
     } catch {
-      setStoredToken(null);
+      clearStoredSession();
       setUser(null);
       setToken(null);
     }
@@ -73,10 +85,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-  return ctx;
 }

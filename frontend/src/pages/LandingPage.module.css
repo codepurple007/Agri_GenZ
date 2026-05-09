@@ -28,12 +28,14 @@
   gap: 10px;
 }
 
-.logo {
-  width: 36px;
-  height: 36px;
+.logoSlot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--brand) 0%, var(--brand-dark) 100%);
   box-shadow: var(--shadow);
+  overflow: hidden;
 }
 
 .appName {
@@ -159,6 +161,12 @@
   margin: 16px 0 0;
   font-size: 0.9rem;
   color: var(--muted);
+}
+
+.inlineLink {
+  font-weight: 600;
+  color: var(--brand-dark);
+  text-decoration: underline;
 }
 
 .card {

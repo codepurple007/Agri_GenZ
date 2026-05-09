@@ -1,61 +1,30 @@
 import { Navigate, Route, Routes } from "react-router-dom";
-import { GuestRoute } from "@/components/GuestRoute";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { LandingPage } from "@/pages/LandingPage";
-import { LoginPage } from "@/pages/auth/LoginPage";
-import { RegisterPage } from "@/pages/auth/RegisterPage";
-import { FarmerLayout } from "@/pages/farmer/FarmerLayout";
-import {
-  FarmerAdvisoryPage,
-  FarmerDashboard,
-  FarmerInputsPage,
-  FarmerMarketPage,
-  FarmerMessagesPage,
-  FarmerProfilePage,
-  FarmerSalesPage,
-  FarmerWeatherPage,
-} from "@/pages/farmer/FarmerPages";
-import { AgentDashboard, AdminDashboard } from "@/pages/portals/PortalPages";
-import { SettingsPage } from "@/pages/SettingsPage";
-import { NotFoundPage } from "@/pages/NotFoundPage";
+import { FarmerSmsRegisterPage } from "@/pages/farmer/FarmerSmsRegisterPage";
+import { KebeleAdvisoryPage } from "@/pages/kebele/KebeleAdvisoryPage";
+import { KebeleBroadcastPage } from "@/pages/kebele/KebeleBroadcastPage";
+import { KebeleBroadcastStatusPage } from "@/pages/kebele/KebeleBroadcastStatusPage";
+import { KebeleFarmersPage } from "@/pages/kebele/KebeleFarmersPage";
+import { KebeleLayout } from "@/pages/kebele/KebeleLayout";
+import { LoginPage } from "@/pages/login/LoginPage";
 
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
-
-      <Route element={<GuestRoute />}>
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/login" element={<LoginPage />} />
-      </Route>
-
-      <Route element={<ProtectedRoute />}>
-        <Route path="/settings" element={<SettingsPage />} />
-      </Route>
-
-      <Route element={<ProtectedRoute roles={["farmer"]} />}>
-        <Route path="/farmer" element={<FarmerLayout />}>
-          <Route index element={<FarmerDashboard />} />
-          <Route path="advisory" element={<FarmerAdvisoryPage />} />
-          <Route path="weather" element={<FarmerWeatherPage />} />
-          <Route path="market" element={<FarmerMarketPage />} />
-          <Route path="inputs" element={<FarmerInputsPage />} />
-          <Route path="sales" element={<FarmerSalesPage />} />
-          <Route path="messages" element={<FarmerMessagesPage />} />
-          <Route path="profile" element={<FarmerProfilePage />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/farmer/register" element={<FarmerSmsRegisterPage />} />
+      <Route element={<ProtectedRoute roles={["kebele_worker"]} />}>
+        <Route path="/kebele" element={<KebeleLayout />}>
+          <Route path="farmers" element={<KebeleFarmersPage />} />
+          <Route path="advisory" element={<KebeleAdvisoryPage />} />
+          <Route path="broadcast" element={<KebeleBroadcastPage />} />
+          <Route path="broadcast/status/:id" element={<KebeleBroadcastStatusPage />} />
+          <Route index element={<Navigate to="/kebele/farmers" replace />} />
         </Route>
       </Route>
-
-      <Route element={<ProtectedRoute roles={["extension_agent"]} />}>
-        <Route path="/agent" element={<AgentDashboard />} />
-      </Route>
-
-      <Route element={<ProtectedRoute roles={["district_admin"]} />}>
-        <Route path="/admin" element={<AdminDashboard />} />
-      </Route>
-
-      <Route path="/app" element={<Navigate to="/farmer" replace />} />
-      <Route path="*" element={<NotFoundPage />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

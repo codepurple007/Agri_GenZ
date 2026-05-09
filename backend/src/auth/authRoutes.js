@@ -1,10 +1,12 @@
 import { Router } from "express";
 import {
   getUserFromPayload,
+  investorLogin,
   loginStart,
   loginVerify,
   registerStart,
   registerVerify,
+  staffLogin,
   verifyToken,
 } from "./authService.js";
 
@@ -32,6 +34,8 @@ function mapErr(res, err) {
       return res.status(401).json({ error: "expired_code", message: "Code expired. Request a new one." });
     case "INVALID_SESSION":
       return res.status(400).json({ error: "invalid_session", message: "Could not complete registration." });
+    case "INVALID_CREDENTIALS":
+      return res.status(401).json({ error: "invalid_credentials", message: "Incorrect username or password." });
     default:
       console.error(err);
       return res.status(500).json({ error: "server_error", message: "Something went wrong." });
@@ -98,6 +102,34 @@ authRouter.post("/login/verify", async (req, res) => {
         fullName: user.full_name,
         role: user.role,
       },
+    });
+  } catch (err) {
+    mapErr(res, err);
+  }
+});
+
+authRouter.post("/staff/login", async (req, res) => {
+  try {
+    const { username, password } = req.body ?? {};
+    const out = await staffLogin({ username, password });
+    res.json({
+      ok: true,
+      token: out.token,
+      user: out.user,
+    });
+  } catch (err) {
+    mapErr(res, err);
+  }
+});
+
+authRouter.post("/investor/login", async (req, res) => {
+  try {
+    const { username, password } = req.body ?? {};
+    const out = await investorLogin({ username, password });
+    res.json({
+      ok: true,
+      token: out.token,
+      user: out.user,
     });
   } catch (err) {
     mapErr(res, err);
