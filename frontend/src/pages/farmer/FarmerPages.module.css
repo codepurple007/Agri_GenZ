@@ -1,0 +1,54 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: var(--brand-dark);
+}
+
+.lead,
+.p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+  font-size: 0.98rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 480px) {
+  .grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  text-decoration: none;
+  color: inherit;
+}
+
+.card strong {
+  color: var(--brand-dark);
+  font-size: 1rem;
+}
+
+.card span {
+  font-size: 0.85rem;
+  color: var(--muted);
+}

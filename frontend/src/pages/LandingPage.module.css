@@ -1,0 +1,252 @@
+.root {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(165deg, #e9f5ec 0%, #f4f7f4 38%, #ffffff 100%);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  padding-top: max(14px, env(safe-area-inset-top));
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--brand) 0%, var(--brand-dark) 100%);
+  box-shadow: var(--shadow);
+}
+
+.appName {
+  font-weight: 700;
+  font-size: 1.15rem;
+  color: var(--brand-dark);
+  letter-spacing: -0.02em;
+}
+
+.lang {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.langBtn,
+.langActive,
+.langQuick {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.langActive {
+  background: var(--brand-dark);
+  color: #f8fff8;
+  border-color: var(--brand-dark);
+}
+
+.langQuick {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  border-style: dashed;
+}
+
+.main {
+  flex: 1;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 20px 18px 32px;
+}
+
+.hero {
+  margin-bottom: 22px;
+}
+
+.badge {
+  display: inline-block;
+  margin: 0 0 12px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--brand-dark);
+  background: var(--accent);
+  border: 1px solid var(--border);
+}
+
+.title {
+  margin: 0 0 20px;
+  font-size: clamp(1.35rem, 4.5vw, 1.75rem);
+  line-height: 1.28;
+  font-weight: 700;
+  color: var(--brand-dark);
+  letter-spacing: -0.03em;
+}
+
+.ctaRow {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+@media (min-width: 380px) {
+  .ctaRow {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}
+
+.btnPrimary,
+.btnSecondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 22px;
+  border-radius: var(--radius);
+  font-weight: 600;
+  text-decoration: none;
+  text-align: center;
+  flex: 1;
+  min-width: min(100%, 160px);
+}
+
+.btnPrimary {
+  background: var(--brand-dark);
+  color: #f5fff7;
+  border: none;
+  box-shadow: var(--shadow);
+}
+
+.btnPrimary:active {
+  transform: scale(0.98);
+}
+
+.btnSecondary {
+  background: var(--surface);
+  color: var(--brand-dark);
+  border: 2px solid var(--brand);
+}
+
+.hint {
+  margin: 16px 0 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.card {
+  background: var(--surface);
+  border-radius: calc(var(--radius) + 4px);
+  padding: 20px 18px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.cardTitle {
+  margin: 0 0 10px;
+  font-size: 1.2rem;
+  color: var(--brand-dark);
+}
+
+.cardLead {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 0.98rem;
+}
+
+.stepsHeading {
+  margin: 0 0 10px;
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.stepItem {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.stepNum {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  background: var(--accent);
+  color: var(--brand-dark);
+  border: 1px solid var(--border);
+}
+
+.note {
+  margin: 18px 0 0;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  font-size: 0.88rem;
+  color: var(--muted);
+  background: var(--danger-soft);
+  border: 1px solid #ffd6d0;
+}
+
+.apiHint {
+  margin: 12px 0 0;
+  font-size: 0.88rem;
+  color: var(--brand-dark);
+  line-height: 1.45;
+}
+
+.mono {
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.footer {
+  padding: 16px;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.6);
+}
