@@ -1,6 +1,5 @@
 import {
   Badge,
-  Box,
   Button,
   FormControl,
   FormLabel,
@@ -29,6 +28,8 @@ import {
 } from "@chakra-ui/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  DEMO_KEBELE_SCOPE,
+  DISTRICT_NUMBERS,
   KEBELE_UNIT_IDS,
   formatDistrictLabel,
   kebeleUnitLabel,
@@ -39,7 +40,7 @@ import { ApiError } from "@/api/errors";
 import { useAuth } from "@/hooks/useAuth";
 import { getStoredLocale, type Locale } from "@/i18n/landing";
 import {
-  farmerJurisdictionLine,
+  coalesceDistrictNum,
   formatJurisdictionLine,
   resolveSmsWorkerJurisdiction,
 } from "@/pages/kebele/kebeleScope";
@@ -94,6 +95,12 @@ export function KebeleFarmersPage() {
   const [formName, setFormName] = useState("");
   const [formPhone, setFormPhone] = useState("");
   const [formLang, setFormLang] = useState("Amharic");
+  const [formRegion, setFormRegion] = useState<SmsKebeleUnitId>(
+    scopedRegionId ?? KEBELE_UNIT_IDS[0],
+  );
+  const [formDistrict, setFormDistrict] = useState<string>(
+    String(scopedDistrictNum ?? DISTRICT_NUMBERS[0]),
+  );
   const [formActive, setFormActive] = useState(true);
 
   const load = useCallback(async () => {
@@ -115,23 +122,45 @@ export function KebeleFarmersPage() {
     void load();
   }, [load]);
 
+  function jurisdictionDefaultsFromScoped(): [SmsKebeleUnitId, string] {
+    const r = scopedRegionId ?? DEMO_KEBELE_SCOPE.region;
+    const rawD = scopedDistrictNum ?? DEMO_KEBELE_SCOPE.district;
+    const d = coalesceDistrictNum(rawD) ?? DEMO_KEBELE_SCOPE.district;
+    const region = (KEBELE_UNIT_IDS as readonly string[]).includes(r)
+      ? (r as SmsKebeleUnitId)
+      : DEMO_KEBELE_SCOPE.region;
+    return [region, String(d)];
+  }
+
   function resetForm(f?: SmsFarmerRow | null) {
     if (f) {
+      const [fallbackR, fallbackD] = jurisdictionDefaultsFromScoped();
       setFormName(f.full_name);
       setFormPhone(f.phone_number.startsWith("+251") ? `0${f.phone_number.slice(4)}` : f.phone_number);
       setFormLang(apiLangToSelect(f.language));
       setFormActive(f.is_active);
+      const rid =
+        typeof f.region_state === "string" && (KEBELE_UNIT_IDS as readonly string[]).includes(f.region_state)
+          ? (f.region_state as SmsKebeleUnitId)
+          : fallbackR;
+      setFormRegion(rid);
+      const dn = coalesceDistrictNum(f.district_number) ?? Number(fallbackD);
+      setFormDistrict(String(dn >= 1 && dn <= 5 ? dn : Number(fallbackD)));
     } else {
+      const [r, ds] = jurisdictionDefaultsFromScoped();
       setFormName("");
       setFormPhone("");
       setFormLang("Amharic");
+      setFormRegion(r);
+      setFormDistrict(ds);
       setFormActive(true);
     }
   }
 
   async function submitAdd() {
-    if (!scopedRegionId || scopedDistrictNum == null) {
-      toast({ status: "warning", title: "Missing jurisdiction on your account." });
+    const dn = coalesceDistrictNum(Number(formDistrict));
+    if (!(KEBELE_UNIT_IDS as readonly string[]).includes(formRegion) || dn == null) {
+      toast({ status: "warning", title: "Choose a valid kebele unit and district (1–5)." });
       return;
     }
     try {
@@ -141,8 +170,8 @@ export function KebeleFarmersPage() {
           full_name: formName.trim(),
           phone_number: formPhone.trim(),
           language: selectToApiLang(formLang),
-          region_state: scopedRegionId,
-          district_number: scopedDistrictNum,
+          region_state: formRegion,
+          district_number: dn,
           crops: [],
         }),
       });
@@ -157,6 +186,11 @@ export function KebeleFarmersPage() {
 
   async function submitEdit() {
     if (!editing) return;
+    const dn = coalesceDistrictNum(Number(formDistrict));
+    if (!(KEBELE_UNIT_IDS as readonly string[]).includes(formRegion) || dn == null) {
+      toast({ status: "warning", title: "Choose a valid kebele unit and district (1–5)." });
+      return;
+    }
     try {
       await apiFetch(`/api/v1/agri-sms/farmers/${encodeURIComponent(editing.id)}`, {
         method: "PUT",
@@ -164,6 +198,8 @@ export function KebeleFarmersPage() {
           full_name: formName.trim(),
           phone_number: formPhone.trim(),
           language: selectToApiLang(formLang),
+          region_state: formRegion,
+          district_number: dn,
           is_active: formActive,
           crops: editing.crops,
         }),
@@ -306,19 +342,32 @@ export function KebeleFarmersPage() {
                 </Select>
               </FormControl>
               <FormControl>
-                <FormLabel>Jurisdiction</FormLabel>
-                <Box
-                  px={3}
-                  py={2.5}
-                  borderWidth="1px"
-                  borderRadius="md"
-                  borderColor="gray.200"
-                  bg="gray.50"
-                >
-                  <Text fontSize="sm" fontWeight="500" color="gray.800">
-                    {jurisdictionLine}
-                  </Text>
-                </Box>
+                <FormLabel>
+                  {uiLocale === "am" ? "ቀበሌ / ወረዳ" : uiLocale === "om" ? "Ganda / Diristiriktii" : "Kebele & district"}
+                </FormLabel>
+                <Stack direction={{ base: "column", md: "row" }} spacing={3}>
+                  <Select
+                    value={formRegion}
+                    onChange={(e) => setFormRegion(e.target.value as SmsKebeleUnitId)}
+                  >
+                    {KEBELE_UNIT_IDS.map((id) => (
+                      <option key={id} value={id}>
+                        {kebeleUnitLabel(id, uiLocale)}
+                      </option>
+                    ))}
+                  </Select>
+                  <Select value={formDistrict} onChange={(e) => setFormDistrict(e.target.value)} maxW={{ md: "200px" }}>
+                    {DISTRICT_NUMBERS.map((n) => (
+                      <option key={n} value={String(n)}>
+                        {formatDistrictLabel(n, uiLocale)}
+                      </option>
+                    ))}
+                  </Select>
+                </Stack>
+                <Text fontSize="xs" color="gray.600" mt={2}>
+                  Default is your logged-in jurisdiction ({jurisdictionLine}). Change when registering a farmer in
+                  another kebele or district—they may not appear in this desk&apos;s filtered list afterward.
+                </Text>
               </FormControl>
             </Stack>
           </ModalBody>
@@ -366,19 +415,28 @@ export function KebeleFarmersPage() {
               </FormControl>
               {editing ? (
                 <FormControl>
-                  <FormLabel>Jurisdiction</FormLabel>
-                  <Box
-                    px={3}
-                    py={2.5}
-                    borderWidth="1px"
-                    borderRadius="md"
-                    borderColor="gray.200"
-                    bg="gray.50"
-                  >
-                    <Text fontSize="sm" fontWeight="500" color="gray.800">
-                      {farmerJurisdictionLine(editing, uiLocale)}
-                    </Text>
-                  </Box>
+                  <FormLabel>
+                    {uiLocale === "am" ? "ቀበሌ / ወረዳ" : uiLocale === "om" ? "Ganda / Diristiriktii" : "Kebele & district"}
+                  </FormLabel>
+                  <Stack direction={{ base: "column", md: "row" }} spacing={3}>
+                    <Select
+                      value={formRegion}
+                      onChange={(e) => setFormRegion(e.target.value as SmsKebeleUnitId)}
+                    >
+                      {KEBELE_UNIT_IDS.map((id) => (
+                        <option key={id} value={id}>
+                          {kebeleUnitLabel(id, uiLocale)}
+                        </option>
+                      ))}
+                    </Select>
+                    <Select value={formDistrict} onChange={(e) => setFormDistrict(e.target.value)} maxW={{ md: "200px" }}>
+                      {DISTRICT_NUMBERS.map((n) => (
+                        <option key={n} value={String(n)}>
+                          {formatDistrictLabel(n, uiLocale)}
+                        </option>
+                      ))}
+                    </Select>
+                  </Stack>
                 </FormControl>
               ) : null}
               <FormControl display="flex" alignItems="center">

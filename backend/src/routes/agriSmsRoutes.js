@@ -5,6 +5,12 @@ import { buildAdvisorySms, estimateSegments } from "../agriSms/messageBuilder.js
 import { generateAdvisoryDraftWithGemini } from "../agriSms/geminiAdvisory.js";
 import { smsHeaderAreaEnglish } from "../agriSms/ethiopiaRegions.js";
 import {
+  forwardAdvisoryToVoiceJobs,
+  getActiveVoiceJob,
+  getVoiceStatusForKebeleSummary,
+  requestVoiceRerecord,
+} from "../agriSms/voiceAdvisoryStore.js";
+import {
   agriSmsStore,
   buildGeminiContextForScope,
   filterTargets,
@@ -45,7 +51,7 @@ function mapSmsErr(res, err) {
     case "INVALID_REGION_STATE":
       return res.status(400).json({
         error: "invalid_region_state",
-        message: "Pick a kebele from the list (Kebele 1–3).",
+        message: "Pick a kebele from the list (Kebele 1–4).",
       });
     case "INVALID_DISTRICT":
       return res.status(400).json({
@@ -82,6 +88,62 @@ agriSmsPublicRouter.post("/farmers/register", (req, res) => {
     return mapSmsErr(res, err);
   }
 });
+
+const kebeleVoiceForwardRouter = Router();
+kebeleVoiceForwardRouter.use(authenticateJwt, authorizeRoles("kebele_worker"));
+kebeleVoiceForwardRouter.post("/advisory-voice/forward", (req, res) => {
+  try {
+    const job = forwardAdvisoryToVoiceJobs({
+      notes: req.body?.notes,
+      forwarded_by: req.auth.sub,
+    });
+    res.status(201).json({
+      ok: true,
+      job: {
+        id: job.id,
+        advisory_id: job.advisory_id,
+        forwarded_at: job.forwarded_at,
+      },
+      message:
+        "Advisory text forwarded to Voice Recorder Officers. They will upload Amharic, Afaan Oromoo, and English audio.",
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "voice_forward_failed", message: "Could not enqueue voice pipeline job." });
+  }
+});
+kebeleVoiceForwardRouter.get("/advisory-voice/status", (_req, res) => {
+  res.json(getVoiceStatusForKebeleSummary());
+});
+kebeleVoiceForwardRouter.post("/advisory-voice/request-rerecord", (req, res) => {
+  try {
+    let jobId = req.body?.job_id ?? null;
+    if (!jobId) {
+      const j = getActiveVoiceJob();
+      if (!j)
+        return res.status(400).json({ error: "no_voice_job", message: "Nothing forwarded yet for voice conversion." });
+      jobId = j.id;
+    }
+    const lang = req.body?.language;
+    requestVoiceRerecord(jobId, lang);
+    res.json(getVoiceStatusForKebeleSummary());
+  } catch (err) {
+    const c = err?.code ?? err?.message;
+    if (c === "NOT_FOUND") return res.status(404).json({ error: "not_found" });
+    if (c === "BAD_LANG") return res.status(400).json({ error: "bad_language" });
+    if (c === "PLATFORM_REVIEW_LOCK") {
+      return res.status(409).json({
+        error: "platform_review_lock",
+        message:
+          typeof err.message === "string" ? err.message : "USSD publication is queued; try again after platform review completes.",
+      });
+    }
+    console.error(err);
+    res.status(500).json({ error: "server_error" });
+  }
+});
+
+agriSmsWorkerRouter.use(kebeleVoiceForwardRouter);
 
 agriSmsWorkerRouter.use(authenticateJwt, authorizeRoles("kebele_worker"));
 

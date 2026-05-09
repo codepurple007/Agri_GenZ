@@ -137,12 +137,13 @@ export function LandingPage() {
           <p className={styles.note} role="note">
             {t.ussdNote}
           </p>
-          {apiLanding?.ussdCodePlaceholder ? (
-            <p className={styles.apiHint}>
-              <span className={styles.mono}>{apiLanding.ussdCodePlaceholder}</span>
-              {suffix}
-            </p>
-          ) : null}
+          <p className={styles.note} role="note">
+            {t.ussdGovNote}
+          </p>
+          <p className={styles.apiHint}>
+            <span className={styles.mono}>{apiLanding?.ussdCodePlaceholder?.trim() || t.demoUssdCode}</span>
+            {suffix}
+          </p>
         </section>
       </main>
 

@@ -1,7 +1,7 @@
 import type { Locale } from "@/i18n/landing";
 
 /** Stored in API field `region_state` — simplified kebele units (localized labels below). */
-export const KEBELE_UNIT_IDS = ["kebele_1", "kebele_2", "kebele_3"] as const;
+export const KEBELE_UNIT_IDS = ["kebele_1", "kebele_2", "kebele_3", "kebele_4"] as const;
 
 export type SmsKebeleUnitId = (typeof KEBELE_UNIT_IDS)[number];
 
@@ -27,6 +27,11 @@ export const KEBELE_UNIT_LABELS: Record<SmsKebeleUnitId, Record<Locale, string>>
     en: "Kebele 3",
     am: "ቀበሌ 3",
     om: "Ganda 3",
+  },
+  kebele_4: {
+    en: "Kebele 4",
+    am: "ቀበሌ 4",
+    om: "Ganda 4",
   },
 };
 

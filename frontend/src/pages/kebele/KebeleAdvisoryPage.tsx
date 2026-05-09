@@ -1,4 +1,7 @@
 import {
+  Alert,
+  AlertIcon,
+  Badge,
   Button,
   FormControl,
   FormLabel,
@@ -7,6 +10,7 @@ import {
   Heading,
   HStack,
   Input,
+  SimpleGrid,
   Select,
   Stack,
   Tab,
@@ -113,10 +117,39 @@ type AiDraftRes = {
   message?: string;
 };
 
+function voiceTrackLabel(status: string): string {
+  switch (status) {
+    case "pending_recording":
+      return "Pending recording";
+    case "recorded":
+      return "Recorded";
+    case "reroll_requested":
+      return "Re-record requested";
+    case "approved":
+      return "Approved";
+    case "sent_to_ussd":
+      return "Live on USSD (*850#)";
+    default:
+      return status || "—";
+  }
+}
+
+type VoiceStatusRes = {
+  forwarded: boolean;
+  job: {
+    id: string;
+    tracks: Partial<Record<SmsLang, { status: string; has_audio?: boolean }>>;
+    ussd_publish_status?: string;
+    submitted_for_platform_review_at?: string | null;
+  } | null;
+};
+
 export function KebeleAdvisoryPage() {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
+  const [voiceInfo, setVoiceInfo] = useState<VoiceStatusRes | null>(null);
+  const [voiceBusy, setVoiceBusy] = useState(false);
   const [season, setSeason] = useState("Meher 2026");
   const [soilCondition, setSoilCondition] = useState("Normal");
   const [fertilizerByLang, setFertilizerByLang] = useState<LangBundle>(() => emptyLangBundle());
@@ -140,6 +173,20 @@ export function KebeleAdvisoryPage() {
     return base;
   }, [season]);
 
+  const refreshVoiceStatus = useCallback(async () => {
+    try {
+      const data = await apiFetch<{ forwarded: boolean; job: VoiceStatusRes["job"] }>(
+        "/api/v1/agri-sms/advisory-voice/status",
+      );
+      setVoiceInfo({
+        forwarded: Boolean(data.forwarded),
+        job: data.job ?? null,
+      });
+    } catch {
+      /* optional — advisory still editable */
+    }
+  }, []);
+
   const load = useCallback(async () => {
     try {
       const data = await apiFetch<{ advisory: AdvisoryDoc }>("/api/v1/agri-sms/advisories/current");
@@ -162,10 +209,11 @@ export function KebeleAdvisoryPage() {
       setMaizeP(String(a.maize_price_etb ?? ""));
       setBarleyP(String(a.barley_price_etb ?? ""));
       setTrend(String(a.market_trend ?? "Stable"));
+      await refreshVoiceStatus();
     } catch {
       toast({ status: "error", title: "Failed." });
     }
-  }, [toast]);
+  }, [toast, refreshVoiceStatus]);
 
   useEffect(() => {
     void load();
@@ -245,6 +293,7 @@ export function KebeleAdvisoryPage() {
         }),
       });
       toast({ status: "success", title: "Saved." });
+      await refreshVoiceStatus();
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : "Save failed.";
       toast({ status: "error", title: msg });
@@ -253,11 +302,135 @@ export function KebeleAdvisoryPage() {
     }
   }
 
+  async function forwardToVoiceStaff() {
+    setVoiceBusy(true);
+    try {
+      await apiFetch("/api/v1/agri-sms/advisory-voice/forward", { method: "POST", body: JSON.stringify({}) });
+      toast({
+        status: "success",
+        title: "Forwarded to Voice Recorder Officers.",
+        description: "Amharic, Afaan Oromoo, and English tracks queued.",
+      });
+      await refreshVoiceStatus();
+    } catch (e) {
+      toast({ status: "error", title: e instanceof ApiError ? e.message : "Forward failed." });
+    } finally {
+      setVoiceBusy(false);
+    }
+  }
+
+  async function requestVoiceRerecord(lng: SmsLang) {
+    setVoiceBusy(true);
+    try {
+      await apiFetch("/api/v1/agri-sms/advisory-voice/request-rerecord", {
+        method: "POST",
+        body: JSON.stringify({ language: lng }),
+      });
+      toast({ status: "info", title: `${lng}: re-record requested.` });
+      await refreshVoiceStatus();
+    } catch (e) {
+      toast({ status: "error", title: e instanceof ApiError ? e.message : "Could not flag re-record." });
+    } finally {
+      setVoiceBusy(false);
+    }
+  }
+
+  const voiceJob = voiceInfo?.job;
+  const voicePendingSa = Boolean(voiceInfo?.forwarded && voiceJob?.ussd_publish_status === "pending_superadmin");
+  const voiceLiveOnUssd = Boolean(
+    voiceInfo?.forwarded &&
+      voiceJob &&
+      (voiceJob.ussd_publish_status === "live" ||
+        SMS_LANGS.every((lng) => voiceJob.tracks?.[lng]?.status === "sent_to_ussd")),
+  );
+
   return (
     <Stack spacing={8}>
       <Heading size="lg" color="brand.900">
         Advisory
       </Heading>
+
+      <Stack
+        spacing={4}
+        bg="white"
+        p={6}
+        borderRadius="lg"
+        borderWidth="1px"
+        borderColor="purple.100"
+        shadow="sm"
+      >
+        <Heading size="sm" color="purple.900">
+          USSD / IVR voice (*850#)
+        </Heading>
+        <Text fontSize="sm" color="gray.700">
+          After the multilingual SMS text below is finalized, forward it so Voice Recorder Officers can attach Amharic,
+          Afaan Oromoo, and English readings for low-bandwidth IVR playback. Super Administrators approve the final masters
+          before farmers hear them via USSD (e.g. <em>*850#</em> — the same dial-flow as the public landing).
+        </Text>
+        {voicePendingSa ? (
+          <Alert status="warning" borderRadius="md" fontSize="sm">
+            <AlertIcon />
+            Voice tracks are queued with the Super Administrator for USSD release. Bulletin audio is not yet on farmers’ dial-in
+            menu.
+          </Alert>
+        ) : null}
+        {voiceLiveOnUssd ? (
+          <Alert status="success" borderRadius="md" fontSize="sm">
+            <AlertIcon />
+            Pack has been released to USSD-style menus (demo). Farmers can dial the cooperative short code, choose language, and
+            hear bulletins.
+          </Alert>
+        ) : null}
+        {!voiceInfo?.forwarded ? (
+          <Button
+            colorScheme="purple"
+            size="sm"
+            maxW="md"
+            isLoading={voiceBusy}
+            onClick={() => void forwardToVoiceStaff()}
+          >
+            Forward advisory text to Voice Recorder Officers
+          </Button>
+        ) : (
+          <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4}>
+            {SMS_LANGS.map((lng) => {
+              const st = voiceInfo.job?.tracks?.[lng]?.status ?? "pending_recording";
+              const colorScheme =
+                st === "sent_to_ussd"
+                  ? "cyan"
+                  : st === "approved" && voiceJob?.ussd_publish_status === "pending_superadmin"
+                    ? "purple"
+                    : st === "approved"
+                      ? "green"
+                      : st === "reroll_requested"
+                        ? "orange"
+                        : "gray";
+              return (
+                <Stack key={lng} spacing={2} bg="purple.50" p={4} borderRadius="md">
+                  <Text fontWeight="bold" fontSize="sm">
+                    {lng === "Oromo" ? "Afaan Oromoo" : lng}
+                  </Text>
+                  <Badge colorScheme={colorScheme}>{voiceTrackLabel(st)}</Badge>
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    isDisabled={
+                      voiceBusy ||
+                      voiceJob?.ussd_publish_status === "pending_superadmin" ||
+                      st === "sent_to_ussd" ||
+                      st === "reroll_requested" ||
+                      !(st === "recorded" || st === "approved")
+                    }
+                    onClick={() => void requestVoiceRerecord(lng)}
+                  >
+                    Request re-record
+                  </Button>
+                </Stack>
+              );
+            })}
+          </SimpleGrid>
+        )}
+      </Stack>
 
       <HStack spacing={3} flexWrap="wrap" bg="brand.50" p={4} borderRadius="lg" borderWidth="1px" borderColor="green.100">
         <Text fontSize="sm" color="gray.700" maxW="md">

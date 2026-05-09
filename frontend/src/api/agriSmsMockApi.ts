@@ -4,11 +4,18 @@
 import { DEMO_KEBELE_SCOPE, ETHIOPIA_REGION_IDS } from "@/agriSms/constants";
 import type { AuthUser } from "@/auth/types";
 import { ApiError } from "@/api/errors";
+import {
+  forwardVoiceJobFromAdvisory,
+  mockKebeleRequestVoiceRerecord,
+  mockVoiceKebeleStatusPayload,
+} from "@/api/voiceRecorderMock";
+import { getNatiMeherAdvisoryMockPayload } from "@/agriSms/natiAdvisorySeed";
 
 const KEBELE_EN_TITLE: Record<string, string> = {
   kebele_1: "Kebele 1",
   kebele_2: "Kebele 2",
   kebele_3: "Kebele 3",
+  kebele_4: "Kebele 4",
 };
 
 function smsAreaEnglish(kebeleUnitId: string, districtNum: number): string {
@@ -53,42 +60,21 @@ export type MockSmsFarmer = {
 
 type Advisory = Record<string, unknown>;
 
+function shallowMergeTripleLang(cur: unknown, inp: unknown): Record<string, string> {
+  if (inp == null || typeof inp !== "object") {
+    return (typeof cur === "object" && cur !== null ? (cur as Record<string, string>) : {}) as Record<string, string>;
+  }
+  const base =
+    typeof cur === "object" && cur !== null ? (cur as Record<string, string>) : ({} as Record<string, string>);
+  return { ...base, ...(inp as Record<string, string>) };
+}
+
 let codeSeq = 42;
 const farmers: MockSmsFarmer[] = [];
 const broadcasts: Array<Record<string, unknown>> = [];
 const logsByBroadcast = new Map<string, Array<Record<string, unknown>>>();
 
-let advisory: Advisory = {
-  id: "adv-mock",
-  season: "Meher 2026",
-  soil_condition: "Normal",
-  fertilizer_recommendation: "Apply NPS at planting, 100kg/hectare",
-  fertilizer_by_lang: {
-    Amharic: "በመትከያ ጊዜ ኤንፒኤስ ይጠቀሙ፤ በአንቀሳቃሽ ደረጃ ዩሪያ የላይ ሽፋን እንደ ምክር ይጠቀሙ።",
-    Oromo: "Yeroo facaa NPS fayyadami; yeroo dafinsa urea akka gorsa ol'aanaa irratti dabaladhu.",
-    English: "Apply NPS at planting, 100kg/hectare",
-  },
-  soil_ph: "Neutral",
-  rain_start: "2026-06-15",
-  rain_end: "2026-09-30",
-  forecast_summary: "Normal rainfall expected. No extreme weather.",
-  forecast_by_lang: {
-    Amharic: "ዝናብ በተለምዶው ኪረምት ውስጥ ሊታይ ይችላል፤ ጠብታዎች ሊኖሩ ይችላሉ።",
-    Oromo: "Bokkaan yeroo abbootiin yeroo amalaatiin ni dhufu; yeroo goggogaa ni uumama.",
-    English: "Normal rainfall expected. No extreme weather.",
-  },
-  weather_alert: "None",
-  recommended_crops: ["Wheat", "Teff", "Maize"],
-  not_recommended_crops: ["Barley (rust risk)"],
-  planting_advice: "Start land preparation early. Use certified seed.",
-  wheat_price_etb: 4200,
-  teff_price_etb: 5800,
-  maize_price_etb: 2500,
-  barley_price_etb: 3200,
-  market_trend: "Stable",
-  created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString(),
-};
+let advisory: Advisory = getNatiMeherAdvisoryMockPayload() as Advisory;
 
 function normPhone(raw: unknown): string | null {
   let s = String(raw ?? "").trim().replace(/[\s-]/g, "");
@@ -134,7 +120,7 @@ function upsertFarmer(body: Record<string, unknown>, byId?: string | null): Mock
 
   const regionRaw = String(body.region_state ?? "").trim();
   if (!isValidEthRegion(regionRaw)) {
-    throw new ApiError(400, "Pick a kebele (1–3) from the list.", { error: "invalid_region_state" });
+    throw new ApiError(400, "Pick a kebele (1–4) from the list.", { error: "invalid_region_state" });
   }
   const dNum = normDistrictMock(body.district_number ?? body.district);
   if (dNum == null) {
@@ -390,6 +376,37 @@ export function tryHandleAgriSms<T>(
     } as T;
   }
 
+  if (
+    pathname === "/api/v1/agri-sms/advisory-voice/forward" ||
+    pathname === "/api/v1/agri-sms/advisory-voice/status" ||
+    pathname === "/api/v1/agri-sms/advisory-voice/request-rerecord"
+  ) {
+    requireKebele(session);
+    if (method === "POST" && pathname === "/api/v1/agri-sms/advisory-voice/forward") {
+      const job = forwardVoiceJobFromAdvisory(advisory, {
+        forwarded_by: session!.id,
+        notes: typeof json.notes === "string" ? json.notes : undefined,
+      });
+      return {
+        ok: true,
+        job: {
+          id: job.id,
+          advisory_id: job.advisory_id,
+          forwarded_at: job.forwarded_at,
+        },
+        message:
+          "Advisory text forwarded to Voice Recorder Officers. They will upload Amharic, Afaan Oromoo, and English audio.",
+      } as T;
+    }
+    if (method === "GET" && pathname === "/api/v1/agri-sms/advisory-voice/status") {
+      return mockVoiceKebeleStatusPayload() as T;
+    }
+    if (method === "POST" && pathname === "/api/v1/agri-sms/advisory-voice/request-rerecord") {
+      return mockKebeleRequestVoiceRerecord(json) as T;
+    }
+    return undefined;
+  }
+
   requireKebele(session);
 
   if (method === "GET" && pathname === "/api/v1/agri-sms/farmers") {
@@ -447,6 +464,7 @@ export function tryHandleAgriSms<T>(
     advisory = {
       ...cur,
       ...input,
+      id: cur.id,
       fertilizer_by_lang:
         input.fertilizer_by_lang != null && typeof input.fertilizer_by_lang === "object"
           ? { ...(cur.fertilizer_by_lang as object), ...(input.fertilizer_by_lang as object) }
@@ -455,6 +473,25 @@ export function tryHandleAgriSms<T>(
         input.forecast_by_lang != null && typeof input.forecast_by_lang === "object"
           ? { ...(cur.forecast_by_lang as object), ...(input.forecast_by_lang as object) }
           : cur.forecast_by_lang,
+      weather_alert_by_lang: shallowMergeTripleLang(cur.weather_alert_by_lang, input.weather_alert_by_lang),
+      rain_window_display_by_lang: shallowMergeTripleLang(
+        cur.rain_window_display_by_lang,
+        input.rain_window_display_by_lang,
+      ),
+      soil_condition_by_lang: shallowMergeTripleLang(cur.soil_condition_by_lang, input.soil_condition_by_lang),
+      soil_ph_by_lang: shallowMergeTripleLang(cur.soil_ph_by_lang, input.soil_ph_by_lang),
+      crops_display_by_lang: shallowMergeTripleLang(cur.crops_display_by_lang, input.crops_display_by_lang),
+      planting_advice_by_lang: shallowMergeTripleLang(cur.planting_advice_by_lang, input.planting_advice_by_lang),
+      market_prices_display_by_lang: shallowMergeTripleLang(
+        cur.market_prices_display_by_lang,
+        input.market_prices_display_by_lang,
+      ),
+      recommended_crops: (input.recommended_crops as unknown) ?? cur.recommended_crops,
+      not_recommended_crops: (input.not_recommended_crops as unknown) ?? cur.not_recommended_crops,
+      wheat_price_etb: input.wheat_price_etb != null ? Number(input.wheat_price_etb) : cur.wheat_price_etb,
+      teff_price_etb: input.teff_price_etb != null ? Number(input.teff_price_etb) : cur.teff_price_etb,
+      maize_price_etb: input.maize_price_etb != null ? Number(input.maize_price_etb) : cur.maize_price_etb,
+      barley_price_etb: input.barley_price_etb != null ? Number(input.barley_price_etb) : cur.barley_price_etb,
       updated_at: new Date().toISOString(),
     };
     return { ok: true, advisory } as T;

@@ -1,5 +1,11 @@
 import { randomUUID } from "crypto";
 import { isValidRegionId, normalizeDistrictNumber, smsHeaderAreaEnglish } from "./ethiopiaRegions.js";
+import { getNatiMeherAdvisorySeed } from "./natiAdvisoryDefaults.js";
+
+function shallowMergeTripleLang(cur, inp) {
+  if (inp == null || typeof inp !== "object") return cur ?? {};
+  return { ...(typeof cur === "object" ? cur : {}), ...inp };
+}
 
 /** In-memory SMS registry & advisories — demo aligned with Agricultural Advisory SRS (no PostgreSQL required). */
 
@@ -9,35 +15,8 @@ export const agriSmsStore = {
   farmers: [],
 
   currentAdvisory: {
+    ...getNatiMeherAdvisorySeed(),
     id: randomUUID(),
-    season: "Meher 2026",
-    soil_condition: "Normal",
-    fertilizer_recommendation: "Apply NPS at planting, 100kg/hectare",
-    fertilizer_by_lang: {
-      Amharic: "",
-      Oromo: "",
-      English: "Apply NPS at planting, 100kg/hectare",
-    },
-    soil_ph: "Neutral",
-    rain_start: "2026-06-15",
-    rain_end: "2026-09-30",
-    forecast_summary: "Normal rainfall expected. No extreme weather.",
-    forecast_by_lang: {
-      Amharic: "",
-      Oromo: "",
-      English: "Normal rainfall expected. No extreme weather.",
-    },
-    weather_alert: "None",
-    recommended_crops: ["Wheat", "Teff", "Maize"],
-    not_recommended_crops: ["Barley (rust risk)"],
-    planting_advice: "Start land preparation early. Use certified seed.",
-    wheat_price_etb: 4200,
-    teff_price_etb: 5800,
-    maize_price_etb: 2500,
-    barley_price_etb: 3200,
-    market_trend: "Stable",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
   },
 
   broadcasts: [],
@@ -237,6 +216,13 @@ export function saveAdvisory(input) {
       input.forecast_by_lang != null && typeof input.forecast_by_lang === "object"
         ? { ...(cur.forecast_by_lang ?? {}), ...input.forecast_by_lang }
         : cur.forecast_by_lang,
+    weather_alert_by_lang: shallowMergeTripleLang(cur.weather_alert_by_lang, input.weather_alert_by_lang),
+    rain_window_display_by_lang: shallowMergeTripleLang(cur.rain_window_display_by_lang, input.rain_window_display_by_lang),
+    soil_condition_by_lang: shallowMergeTripleLang(cur.soil_condition_by_lang, input.soil_condition_by_lang),
+    soil_ph_by_lang: shallowMergeTripleLang(cur.soil_ph_by_lang, input.soil_ph_by_lang),
+    crops_display_by_lang: shallowMergeTripleLang(cur.crops_display_by_lang, input.crops_display_by_lang),
+    planting_advice_by_lang: shallowMergeTripleLang(cur.planting_advice_by_lang, input.planting_advice_by_lang),
+    market_prices_display_by_lang: shallowMergeTripleLang(cur.market_prices_display_by_lang, input.market_prices_display_by_lang),
     recommended_crops: input.recommended_crops ?? cur.recommended_crops,
     not_recommended_crops: input.not_recommended_crops ?? cur.not_recommended_crops,
     wheat_price_etb: input.wheat_price_etb != null ? Number(input.wheat_price_etb) : cur.wheat_price_etb,

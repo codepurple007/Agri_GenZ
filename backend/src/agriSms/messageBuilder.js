@@ -94,16 +94,22 @@ export function buildAdvisorySms({ advisory, kebeleLabel, language, include }) {
       "fertilizer_recommendation",
       lang,
     );
-    parts.push(t.soilBlock(dash(advisory.soil_condition), dash(advisory.soil_ph), fert));
+    const soilCond = pickLangParagraph(advisory, "soil_condition_by_lang", "soil_condition", lang);
+    const soilPhPick = pickLangParagraph(advisory, "soil_ph_by_lang", "soil_ph", lang);
+    parts.push(t.soilBlock(dash(soilCond), dash(soilPhPick), fert));
   }
   if (include.weather) {
     const fc = pickLangParagraph(advisory, "forecast_by_lang", "forecast_summary", lang);
+    const alertPick =
+      pickLangParagraph(advisory, "weather_alert_by_lang", "weather_alert", lang) ||
+      advisory.weather_alert ||
+      "None";
     parts.push(
       t.weatherBlock(
         dash(advisory.rain_start),
         dash(advisory.rain_end),
         fc,
-        advisory.weather_alert || "None",
+        alertPick,
       ),
     );
   }

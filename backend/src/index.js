@@ -11,14 +11,18 @@ import { enrollmentRouter } from "./routes/enrollmentRoutes.js";
 import { publicInvestorSetupRouter } from "./routes/publicInvestorSetupRoutes.js";
 import { agriSmsPublicRouter, agriSmsWorkerRouter } from "./routes/agriSmsRoutes.js";
 import geoRoutes from "./routes/geoRoutes.js";
+import { voiceRecorderRouter } from "./routes/voiceRecorderRoutes.js";
+import { superAdminRouter } from "./routes/superAdminRoutes.js";
+import { provisionStaffSeedFromEnv } from "./data/provisionedStaffStore.js";
 
 await runMigrations().catch((err) => console.error("[migrate]", err));
+provisionStaffSeedFromEnv();
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
 
 app.use(cors({ origin: true }));
-app.use(express.json());
+app.use(express.json({ limit: "12mb" }));
 
 /**
  * GET /api/health — liveness + optional PostgreSQL check.
@@ -57,6 +61,8 @@ app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/geo", geoRoutes);
 app.use("/api/v1/agri-sms", agriSmsPublicRouter);
 app.use("/api/v1/agri-sms", agriSmsWorkerRouter);
+app.use("/api/v1/voice-recorder", voiceRecorderRouter);
+app.use("/api/v1/superadmin", superAdminRouter);
 
 app.listen(PORT, () => {
   console.log(`API listening on http://localhost:${PORT}`);

@@ -1,6 +1,8 @@
 import jwt from "jsonwebtoken";
 import { pool } from "../db.js";
 import { findInvestorUserForLogin } from "../data/bankTellerMemory.js";
+import { provisionStaffLoginFind } from "../data/provisionedStaffStore.js";
+import { authenticateSmsPresetStaffLogin } from "../agriSms/presetSmsStaffLogin.js";
 import { memoryStore } from "./memoryStore.js";
 import { pgStore } from "./pgStore.js";
 import { isValidRole, normalizeEthiopiaPhone } from "./cryptoUtils.js";
@@ -83,7 +85,9 @@ export async function getUserFromPayload(payload) {
       payload.role === "extension_agent" ||
       payload.role === "investor" ||
       payload.role === "enrollment_clerk" ||
-      payload.role === "kebele_worker")
+      payload.role === "kebele_worker" ||
+      payload.role === "voice_recorder_officer" ||
+      payload.role === "superadmin")
   ) {
     return {
       id: payload.sub,
@@ -215,6 +219,7 @@ export async function staffLogin({ username, password }) {
   const clerkPass = process.env.DEMO_CLERK_PASSWORD ?? "demo";
   const adminPass = process.env.DEMO_ADMIN_PASSWORD ?? "demo";
 
+  /** @type {Record<string, unknown> | undefined} */
   let row;
   if (u === "clerk" && p === clerkPass) {
     row = {
@@ -237,19 +242,35 @@ export async function staffLogin({ username, password }) {
       full_name: "Enrollment Clerk",
       role: "enrollment_clerk",
     };
-  } else if (u === "kebele" && p === (process.env.DEMO_KEBELE_PASSWORD ?? "demo")) {
-    row = {
-      id: "66666666-6666-6666-6666-666666666666",
-      phone_e164: "+251900000006",
-      full_name: "Almaz D. (Kebele worker)",
-      role: "kebele_worker",
-      sms_region: "kebele_3",
-      sms_district: 3,
-    };
   } else {
-    const err = new Error("invalid_credentials");
-    err.code = "INVALID_CREDENTIALS";
-    throw err;
+    const smsAuth = authenticateSmsPresetStaffLogin(u, p);
+    if (smsAuth) row = smsAuth;
+  }
+
+  if (!row && (u === "superadmin" || u === "owner") && p === (process.env.DEMO_SUPERADMIN_PASSWORD ?? "demo")) {
+    row = {
+      id: "88888888-8888-8888-8888-888888888888",
+      phone_e164: "+251900000008",
+      full_name: "Super Administrator (demo)",
+      role: "superadmin",
+    };
+  }
+
+  if (!row) {
+    const pv = provisionStaffLoginFind(u, p);
+    if (!pv) {
+      const err = new Error("invalid_credentials");
+      err.code = "INVALID_CREDENTIALS";
+      throw err;
+    }
+    row = {
+      id: pv.id,
+      phone_e164: pv.phone_e164,
+      full_name: pv.full_name,
+      role: pv.role,
+    };
+    if (pv.sms_region != null) row.sms_region = pv.sms_region;
+    if (pv.sms_district != null) row.sms_district = pv.sms_district;
   }
 
   const token = signToken(row);

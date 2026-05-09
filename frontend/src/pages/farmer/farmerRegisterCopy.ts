@@ -6,7 +6,7 @@ export type FarmerRegisterStrings = {
   phone: string;
   phoneHint: string;
   language: string;
-  /** Kebele unit (1–3), shown in UI language */
+  /** Kebele unit (1–4), shown in UI language */
   kebele: string;
   /** District 1–5 */
   district: string;

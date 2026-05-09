@@ -1,5 +1,5 @@
-/** Canonical IDs stored in `region_state` — kebele units 1–3 (matches frontend `KEBELE_UNIT_IDS`). */
-export const KEBELE_UNIT_IDS = ["kebele_1", "kebele_2", "kebele_3"];
+/** Canonical IDs stored in `region_state` — kebele units (matches frontend `KEBELE_UNIT_IDS`). */
+export const KEBELE_UNIT_IDS = ["kebele_1", "kebele_2", "kebele_3", "kebele_4"];
 
 const KEBELE_SET = new Set(KEBELE_UNIT_IDS);
 
@@ -18,6 +18,7 @@ const EN_TITLES = {
   kebele_1: "Kebele 1",
   kebele_2: "Kebele 2",
   kebele_3: "Kebele 3",
+  kebele_4: "Kebele 4",
 };
 
 /** English line for SMS headers / Gemini (API supports three UI languages separately). */
